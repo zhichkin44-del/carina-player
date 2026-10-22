@@ -1,7 +1,10 @@
 //! The music library: only folders the user added, only audio files inside them.
 //! A folder is a playlist; its subfolders are albums/collections within it.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::UNIX_EPOCH;
 
 use base64::Engine;
 use lofty::prelude::*;
@@ -156,9 +159,81 @@ pub fn read_track(path: &Path) -> TrackInfo {
     info
 }
 
+// ---- tag cache: tags are read once per file version, not on every folder open or search ----
+
+#[derive(Default, Serialize, Deserialize)]
+struct Cache {
+    /// path → (modified secs, size, tags)
+    entries: HashMap<String, (u64, u64, TrackInfo)>,
+    #[serde(skip)]
+    dirty: bool,
+    #[serde(skip)]
+    loaded: bool,
+}
+
+static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
+
+fn cache_file(app: &AppHandle) -> Option<PathBuf> {
+    Some(app.path().app_cache_dir().ok()?.join("tags.json"))
+}
+
+/// File version: a changed file (re-tagged, replaced) is read again.
+fn stamp(path: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    let modified = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    Some((modified, meta.len()))
+}
+
+/// Tags of a file, from the cache when the file hasn't changed.
+pub fn track_info(app: &AppHandle, path: &Path) -> TrackInfo {
+    let key = path.to_string_lossy().into_owned();
+    let stamp = stamp(path);
+    let mut guard = CACHE.lock().unwrap();
+    let cache = guard.get_or_insert_with(Cache::default);
+    if !cache.loaded {
+        cache.loaded = true;
+        if let Some(saved) = cache_file(app)
+            .and_then(|f| std::fs::read_to_string(f).ok())
+            .and_then(|t| serde_json::from_str::<Cache>(&t).ok())
+        {
+            cache.entries = saved.entries;
+        }
+    }
+    if let (Some((m, l)), Some((cm, cl, info))) = (stamp, cache.entries.get(&key))
+        && m == *cm
+        && l == *cl
+    {
+        return info.clone();
+    }
+    drop(guard);
+    let info = read_track(path);
+    if let Some((m, l)) = stamp {
+        let mut guard = CACHE.lock().unwrap();
+        let cache = guard.get_or_insert_with(Cache::default);
+        cache.entries.insert(key, (m, l, info.clone()));
+        cache.dirty = true;
+    }
+    info
+}
+
+/// Write the cache to disk if something new was read.
+pub fn flush_cache(app: &AppHandle) {
+    let mut guard = CACHE.lock().unwrap();
+    let Some(cache) = guard.as_mut().filter(|c| c.dirty) else {
+        return;
+    };
+    cache.dirty = false;
+    if let (Some(f), Ok(text)) = (cache_file(app), serde_json::to_string(&*cache)) {
+        if let Some(dir) = f.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(f, text);
+    }
+}
+
 /// Tracks of one folder: by track number when every file has one, else by file name.
-fn read_tracks(files: &[PathBuf]) -> Vec<TrackInfo> {
-    let mut tracks: Vec<TrackInfo> = files.iter().map(|p| read_track(p)).collect();
+fn read_tracks(app: &AppHandle, files: &[PathBuf]) -> Vec<TrackInfo> {
+    let mut tracks: Vec<TrackInfo> = files.iter().map(|p| track_info(app, p)).collect();
     if tracks.iter().all(|t| t.number.is_some()) {
         tracks.sort_by_key(|t| t.number);
     }
@@ -287,7 +362,11 @@ pub async fn library_open(app: AppHandle, path: String) -> Result<FolderView, St
             .filter(|d| has_audio(d, 1))
             .map(|d| FolderEntry { name: name_of(&d), path: d.to_string_lossy().into_owned() })
             .collect(),
-        tracks: read_tracks(&files),
+        tracks: {
+            let tracks = read_tracks(&app, &files);
+            flush_cache(&app);
+            tracks
+        },
     })
 }
 
@@ -310,9 +389,9 @@ pub async fn library_search(app: AppHandle, path: String, query: String) -> Resu
     for f in files {
         let rel = f.strip_prefix(&dir).unwrap_or(&f).to_string_lossy().to_lowercase();
         if words.iter().all(|w| rel.contains(w)) {
-            found.push(read_track(&f));
+            found.push(track_info(&app, &f));
         } else {
-            let t = read_track(&f);
+            let t = track_info(&app, &f);
             let text = format!("{} {} {}", t.title, t.artist, t.album).to_lowercase();
             if words.iter().all(|w| text.contains(w)) {
                 found.push(t);
@@ -322,6 +401,7 @@ pub async fn library_search(app: AppHandle, path: String, query: String) -> Resu
             break;
         }
     }
+    flush_cache(&app);
     Ok(found)
 }
 

@@ -6,6 +6,7 @@ mod engine;
 mod layout;
 mod library;
 mod media;
+mod playlists;
 mod position;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -141,13 +142,29 @@ pub fn run() {
             engine::play_folder,
             engine::play_tracks,
             engine::queue_jump,
+            engine::queue_play_next,
+            engine::queue_add,
+            engine::queue_remove,
+            engine::queue_move,
             engine::set_volume,
+            engine::set_shuffle,
+            engine::set_repeat,
             library::library_roots,
             library::library_add,
             library::library_remove,
             library::library_open,
             library::library_cover,
             library::library_search,
+            playlists::playlists,
+            playlists::playlist_tracks,
+            playlists::playlist_create,
+            playlists::playlist_rename,
+            playlists::playlist_delete,
+            playlists::playlist_add,
+            playlists::playlist_remove,
+            playlists::playlist_move,
+            playlists::favorite_toggle,
+            playlists::favorites,
             set_panel
         ])
         .run(tauri::generate_context!())
