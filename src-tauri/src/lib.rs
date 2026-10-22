@@ -8,9 +8,20 @@ use tauri::Manager;
 /// Widget size in logical pixels (must match `tauri.conf.json`).
 const WIDGET_SIZE: (f64, f64) = (400.0, 132.0);
 const WIDGET_MARGIN: f64 = 24.0;
-/// Glass tint, 0xAABBGGRR: deep space blue at ~22% opacity.
+/// Native acrylic tint, 0xAABBGGRR. Windows barely applies it, so the page paints the
+/// user's background opacity itself; this only keeps acrylic from misbehaving at alpha 0.
 #[cfg(windows)]
-const GLASS_TINT: u32 = 0x381A1210;
+const GLASS_TINT: u32 = 0x101A1210;
+
+/// Blur the wallpaper behind the widget, or keep it sharp.
+#[tauri::command]
+fn set_glass(window: tauri::WebviewWindow, blur: bool) -> tauri::Result<()> {
+    #[cfg(windows)]
+    desktop::glass(window.hwnd()?, GLASS_TINT, blur);
+    #[cfg(not(windows))]
+    let _ = (window, blur);
+    Ok(())
+}
 
 fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.primary_monitor()? else {
@@ -46,7 +57,7 @@ pub fn run() {
             #[cfg(windows)]
             {
                 let hwnd = widget.hwnd()?;
-                desktop::glass(hwnd, GLASS_TINT);
+                desktop::glass(hwnd, GLASS_TINT, true);
                 desktop::pin(hwnd);
             }
             media::spawn(app.handle().clone());
@@ -55,7 +66,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             media::media_toggle,
             media::media_next,
-            media::media_previous
+            media::media_previous,
+            set_glass
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

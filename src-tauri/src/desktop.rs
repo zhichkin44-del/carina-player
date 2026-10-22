@@ -24,7 +24,8 @@ static WIDGET: AtomicIsize = AtomicIsize::new(0);
 ///
 /// Uses the accent policy (SetWindowCompositionAttribute), not DWM system backdrops: system
 /// backdrops turn into a flat colour when the window is inactive, and the widget is never active.
-pub fn glass(hwnd: HWND, tint_abgr: u32) {
+/// Without `blur` the native layer is switched off and the page paints the tint itself.
+pub fn glass(hwnd: HWND, tint_abgr: u32, blur: bool) {
     #[repr(C)]
     struct AccentPolicy {
         state: u32,
@@ -40,6 +41,7 @@ pub fn glass(hwnd: HWND, tint_abgr: u32) {
     }
     type Swca = unsafe extern "system" fn(HWND, *mut CompositionData) -> BOOL;
 
+    const ACCENT_DISABLED: u32 = 0;
     const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
     const WCA_ACCENT_POLICY: u32 = 19;
 
@@ -53,9 +55,10 @@ pub fn glass(hwnd: HWND, tint_abgr: u32) {
         {
             let swca: Swca = std::mem::transmute(f);
             let mut policy = AccentPolicy {
-                state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                state: if blur { ACCENT_ENABLE_ACRYLICBLURBEHIND } else { ACCENT_DISABLED },
                 flags: 0,
-                gradient: tint_abgr,
+                // Acrylic misbehaves with a fully transparent tint.
+                gradient: tint_abgr.max(0x0100_0000),
                 animation: 0,
             };
             let mut data = CompositionData {
