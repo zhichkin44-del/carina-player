@@ -1,22 +1,74 @@
 #[cfg(windows)]
 mod desktop;
+mod engine;
 mod layout;
+mod library;
 mod media;
 mod position;
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::Manager;
 
 /// Widget size in logical pixels (must match `tauri.conf.json`).
 const WIDGET_SIZE: (f64, f64) = (400.0, 132.0);
 const WIDGET_MARGIN: f64 = 24.0;
-/// Blur the wallpaper behind the widget, or keep it sharp.
+/// Height of the window with the library panel open, logical pixels.
+const PANEL_HEIGHT: f64 = 580.0;
+
+static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
+/// The panel grew upwards (the widget sits in the lower half of the screen).
+static PANEL_UP: AtomicBool = AtomicBool::new(false);
+
+/// Open or close the library panel: the window grows towards the middle of the screen.
+/// Returns "up" or "down" so the page puts the panel on the right side of the widget card.
 #[tauri::command]
-fn set_glass(window: tauri::WebviewWindow, blur: bool) -> tauri::Result<()> {
-    #[cfg(windows)]
-    desktop::glass(window.hwnd()?, blur);
-    #[cfg(not(windows))]
-    let _ = (window, blur);
-    Ok(())
+fn set_panel(window: tauri::WebviewWindow, open: bool) -> tauri::Result<&'static str> {
+    let scale = window.scale_factor()?;
+    let pos = window.outer_position()?;
+    let width = window.outer_size()?.width;
+    let compact = (WIDGET_SIZE.1 * scale).round() as i32;
+    let tall = (PANEL_HEIGHT * scale).round() as i32;
+    let dir = |up: bool| if up { "up" } else { "down" };
+
+    if open {
+        if PANEL_OPEN.swap(true, Ordering::Relaxed) {
+            return Ok(dir(PANEL_UP.load(Ordering::Relaxed)));
+        }
+        let up = match window.current_monitor()? {
+            Some(m) => {
+                let area = m.work_area();
+                let middle = area.position.y + area.size.height as i32 / 2;
+                pos.y + compact / 2 > middle
+            }
+            None => false,
+        };
+        PANEL_UP.store(up, Ordering::Relaxed);
+        position::suspend(true);
+        if up {
+            window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y - (tall - compact)))?;
+        }
+        window.set_size(tauri::PhysicalSize::new(width, tall as u32))?;
+        window.set_focusable(true)?;
+        #[cfg(windows)]
+        desktop::styles(window.hwnd()?, true);
+        let _ = window.set_focus();
+        Ok(dir(up))
+    } else {
+        if !PANEL_OPEN.swap(false, Ordering::Relaxed) {
+            return Ok("none");
+        }
+        let up = PANEL_UP.load(Ordering::Relaxed);
+        window.set_size(tauri::PhysicalSize::new(width, compact as u32))?;
+        if up {
+            window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y + (tall - compact)))?;
+        }
+        window.set_focusable(false)?;
+        #[cfg(windows)]
+        desktop::styles(window.hwnd()?, false);
+        position::suspend(false);
+        Ok("none")
+    }
 }
 
 /// Where the user left the widget, if that spot is still on a screen; else the bottom-right
@@ -61,6 +113,7 @@ fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let widget = app
@@ -72,18 +125,28 @@ pub fn run() {
             widget.show()?;
             #[cfg(windows)]
             {
-                let hwnd = widget.hwnd()?;
-                desktop::glass(hwnd, true);
-                desktop::pin(hwnd);
+                desktop::pin(widget.hwnd()?);
             }
             media::spawn(app.handle().clone());
+            engine::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             media::media_toggle,
             media::media_next,
             media::media_previous,
-            set_glass
+            media::media_seek,
+            engine::play_folder,
+            engine::play_tracks,
+            engine::queue_jump,
+            engine::set_volume,
+            library::library_roots,
+            library::library_add,
+            library::library_remove,
+            library::library_open,
+            library::library_cover,
+            library::library_search,
+            set_panel
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

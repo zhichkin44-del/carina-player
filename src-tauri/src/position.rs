@@ -1,6 +1,7 @@
 //! Remembers where the user dragged the widget.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::time::Duration;
 
@@ -16,6 +17,14 @@ pub struct Saved {
 
 /// A drag produces a stream of moves; write once it has settled.
 const SETTLE: Duration = Duration::from_millis(400);
+
+/// While the panel is open the window is taller and may have grown upwards: that is not a spot
+/// the user chose, so don't save it.
+static SUSPENDED: AtomicBool = AtomicBool::new(false);
+
+pub fn suspend(on: bool) {
+    SUSPENDED.store(on, Ordering::Relaxed);
+}
 
 fn file(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_config_dir().ok()?.join("widget.json"))
@@ -56,7 +65,9 @@ pub fn track(window: &WebviewWindow) {
                     Err(RecvTimeoutError::Disconnected) => return,
                 }
             }
-            store(&app, Saved { x: pos.x, y: pos.y });
+            if !SUSPENDED.load(Ordering::Relaxed) {
+                store(&app, Saved { x: pos.x, y: pos.y });
+            }
         }
     });
 }

@@ -8,6 +8,8 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::engine;
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NowPlaying {
@@ -50,6 +52,8 @@ pub enum Command {
     Toggle,
     Next,
     Previous,
+    /// Seconds from the start of the track.
+    Seek(f64),
 }
 
 static COMMANDS: OnceLock<Mutex<Sender<Command>>> = OnceLock::new();
@@ -60,25 +64,36 @@ fn send(cmd: Command) {
     }
 }
 
+// The widget's buttons drive Carina's own engine when it has a queue, else the system player.
+
 #[tauri::command]
 pub fn media_toggle() {
-    send(Command::Toggle);
+    if engine::active() { engine::send(engine::Cmd::Toggle) } else { send(Command::Toggle) }
 }
 
 #[tauri::command]
 pub fn media_next() {
-    send(Command::Next);
+    if engine::active() { engine::send(engine::Cmd::Next) } else { send(Command::Next) }
 }
 
 #[tauri::command]
 pub fn media_previous() {
-    send(Command::Previous);
+    if engine::active() { engine::send(engine::Cmd::Previous) } else { send(Command::Previous) }
+}
+
+#[tauri::command]
+pub fn media_seek(seconds: f64) {
+    if engine::active() { engine::send(engine::Cmd::Seek(seconds)) } else { send(Command::Seek(seconds)) }
 }
 
 /// Which session to show, from `(app id, is playing)` pairs: one that is playing wins — the one
 /// we already show, then the system's current, then any; with nothing playing we stay on the one
 /// we showed (so Play resumes it), else fall back to the system's current, else the first.
-pub fn pick(sessions: &[(String, bool)], current: Option<&str>, shown: Option<&str>) -> Option<usize> {
+pub fn pick(
+    sessions: &[(String, bool)],
+    current: Option<&str>,
+    shown: Option<&str>,
+) -> Option<usize> {
     let find = |id: Option<&str>, playing_only: bool| {
         let id = id?;
         sessions
@@ -117,6 +132,9 @@ fn run(app: AppHandle, rx: Receiver<Command>) {
             Ok(cmd) => system::command(&manager, &shown, cmd),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
+        }
+        if engine::active() {
+            continue;
         }
         let now = system::read(&manager, &mut shown, &last).unwrap_or_default();
         if now != last {
@@ -184,6 +202,14 @@ mod system {
                 Ok(Back::Restart) => session.TryChangePlaybackPositionAsync(0),
                 _ => return,
             },
+            Command::Seek(seconds) => {
+                let start = session
+                    .GetTimelineProperties()
+                    .and_then(|t| t.StartTime())
+                    .map(|t| t.Duration)
+                    .unwrap_or(0);
+                session.TryChangePlaybackPositionAsync(start + (seconds * TICKS_PER_SECOND) as i64)
+            }
         };
         if let Ok(op) = op {
             let _ = op.join();
@@ -226,7 +252,10 @@ mod system {
 
     fn back(session: &Session) -> Result<Back> {
         let c = session.GetPlaybackInfo()?.Controls()?;
-        Ok(back_action(c.IsPreviousEnabled()?, c.IsPlaybackPositionEnabled()?))
+        Ok(back_action(
+            c.IsPreviousEnabled()?,
+            c.IsPlaybackPositionEnabled()?,
+        ))
     }
 
     /// Position extrapolated to "now": sessions only report it when something changes.
@@ -258,7 +287,11 @@ mod system {
         reader.LoadAsync(size)?.join()?;
         let mut bytes = vec![0u8; size as usize];
         reader.ReadBytes(&mut bytes)?;
-        let mime = if mime.is_empty() { "image/png".into() } else { mime };
+        let mime = if mime.is_empty() {
+            "image/png".into()
+        } else {
+            mime
+        };
         Ok(format!(
             "data:{mime};base64,{}",
             base64::engine::general_purpose::STANDARD.encode(bytes)

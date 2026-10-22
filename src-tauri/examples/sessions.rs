@@ -3,7 +3,10 @@
 fn main() -> windows::core::Result<()> {
     use windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager as Manager;
     let manager = Manager::RequestAsync()?.join()?;
-    let current = manager.GetCurrentSession().and_then(|s| s.SourceAppUserModelId()).ok();
+    let current = manager
+        .GetCurrentSession()
+        .and_then(|s| s.SourceAppUserModelId())
+        .ok();
     println!("current: {current:?}");
     let list = manager.GetSessions()?;
     for i in 0..list.Size()? {

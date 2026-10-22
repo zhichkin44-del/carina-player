@@ -30,8 +30,18 @@ pub fn fits(pos: (i32, i32), size: (i32, i32), monitors: &[Rect]) -> bool {
 mod tests {
     use super::*;
 
-    const MAIN: Rect = Rect { x: 0, y: 0, w: 1920, h: 1200 };
-    const SECOND: Rect = Rect { x: 1920, y: 0, w: 2560, h: 1440 };
+    const MAIN: Rect = Rect {
+        x: 0,
+        y: 0,
+        w: 1920,
+        h: 1200,
+    };
+    const SECOND: Rect = Rect {
+        x: 1920,
+        y: 0,
+        w: 2560,
+        h: 1440,
+    };
 
     #[test]
     fn saved_spot_on_a_monitor_fits() {
@@ -49,13 +59,23 @@ mod tests {
     #[test]
     fn bottom_right_respects_taskbar_and_margin() {
         // 1920x1200 screen, 60 px taskbar at the bottom.
-        let work = Rect { x: 0, y: 0, w: 1920, h: 1140 };
+        let work = Rect {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1140,
+        };
         assert_eq!(bottom_right(work, (400, 140), 24), (1496, 976));
     }
 
     #[test]
     fn bottom_right_on_second_monitor() {
-        let work = Rect { x: 1920, y: -200, w: 2560, h: 1400 };
+        let work = Rect {
+            x: 1920,
+            y: -200,
+            w: 2560,
+            h: 1400,
+        };
         assert_eq!(bottom_right(work, (400, 140), 24), (4056, 1036));
     }
 }
