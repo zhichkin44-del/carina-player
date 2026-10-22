@@ -605,6 +605,15 @@ pub(crate) fn open(path: &Path) -> Option<Decoder<BufReader<File>>> {
         .ok()
 }
 
+/// Files handed to Carina by Windows (command line or a second launch).
+pub fn open_paths(args: impl IntoIterator<Item = String>) {
+    let paths: Vec<PathBuf> = args.into_iter().map(PathBuf::from).filter(|p| p.exists()).collect();
+    let (queue, start) = library::queue_for_opened(&paths);
+    if !queue.is_empty() {
+        send(Cmd::Play { queue, start });
+    }
+}
+
 // ---- commands ----
 
 fn library_paths(app: &AppHandle, paths: Vec<String>) -> Vec<PathBuf> {
@@ -662,6 +671,12 @@ pub fn queue_remove(index: usize) {
 #[tauri::command]
 pub fn queue_move(from: usize, to: usize) {
     send(Cmd::Move { from, to });
+}
+
+/// Audio files dropped on the widget play like files opened from Explorer.
+#[tauri::command]
+pub fn open_files(paths: Vec<String>) {
+    open_paths(paths);
 }
 
 #[tauri::command]

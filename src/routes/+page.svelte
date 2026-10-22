@@ -318,9 +318,15 @@
         receivedAt = performance.now();
       }),
       listen<QueueState>("queue", (e) => (queue = e.payload)),
-      // Drop a music folder on the widget: add it and play it.
+      // Drop on the widget: a music folder joins the library and plays; audio files just play.
       getCurrentWebview().onDragDropEvent(async (e) => {
         if (e.payload.type !== "drop") return;
+        const audio = /\.(mp3|flac|wav|m4a|aac|ogg|aiff?)$/i;
+        const files = e.payload.paths.filter((p) => audio.test(p));
+        if (files.length) {
+          invoke("open_files", { paths: files });
+          return;
+        }
         for (const path of e.payload.paths) {
           if (await addFolder(path)) {
             playFolder(path);

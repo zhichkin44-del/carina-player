@@ -136,6 +136,30 @@ pub fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// What to play for files opened from Explorer ("Open with Carina", double click):
+/// one file → its whole folder, starting at that file (so next/back work);
+/// several files or folders → exactly those, folders expanded.
+pub fn queue_for_opened(paths: &[PathBuf]) -> (Vec<PathBuf>, usize) {
+    let audio: Vec<&PathBuf> = paths.iter().filter(|p| p.is_dir() || is_audio(p)).collect();
+    if let [single] = audio.as_slice()
+        && single.is_file()
+        && let Some(dir) = single.parent()
+    {
+        let (_, files) = children(dir);
+        let start = files.iter().position(|f| f == *single).unwrap_or(0);
+        return (files, start);
+    }
+    let mut queue = Vec::new();
+    for p in audio {
+        if p.is_dir() {
+            collect(p, 0, &mut queue);
+        } else {
+            queue.push(p.clone());
+        }
+    }
+    (queue, 0)
+}
+
 pub fn read_track(path: &Path) -> TrackInfo {
     let mut info = TrackInfo {
         path: path.to_string_lossy().into_owned(),
@@ -485,6 +509,14 @@ mod tests {
         collect(&root.join("A"), 0, &mut files);
         let names: Vec<String> = files.iter().map(|f| name_of(f)).collect();
         assert_eq!(names, vec!["2. b.mp3", "10. c.mp3", "1. d.flac"]);
+
+        // Opening one file plays its folder from that file; several files play just those.
+        let (q, start) = queue_for_opened(&[root.join("A/10. c.mp3")]);
+        assert_eq!(q.iter().map(|f| name_of(f)).collect::<Vec<_>>(), vec!["2. b.mp3", "10. c.mp3"]);
+        assert_eq!(start, 1);
+        let (q, start) = queue_for_opened(&[root.join("A/Sub/1. d.flac"), root.join("Art/cover.jpg"), root.join("A/2. b.mp3")]);
+        assert_eq!(q.iter().map(|f| name_of(f)).collect::<Vec<_>>(), vec!["1. d.flac", "2. b.mp3"]);
+        assert_eq!(start, 0);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

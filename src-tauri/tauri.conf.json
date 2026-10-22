@@ -43,6 +43,24 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp3",
+          "flac",
+          "wav",
+          "m4a",
+          "aac",
+          "ogg",
+          "aif",
+          "aiff"
+        ],
+        "name": "Carina Audio",
+        "description": "Аудиофайл",
+        "role": "Viewer"
+      }
+    ],
+    "shortDescription": "Лёгкий музыкальный плеер-виджет"
   }
 }

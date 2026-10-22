@@ -55,7 +55,12 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&toggle, &autostart, &PredefinedMenuItem::separator(app)?, &quit],
+        &[
+            &toggle,
+            &autostart,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
     )?;
 
     let on_menu = toggle.clone();
@@ -69,7 +74,11 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
             "autostart" => {
                 let launcher = app.autolaunch();
                 let on = launcher.is_enabled().unwrap_or(false);
-                let _ = if on { launcher.disable() } else { launcher.enable() };
+                let _ = if on {
+                    launcher.disable()
+                } else {
+                    launcher.enable()
+                };
                 let _ = autostart.set_checked(launcher.is_enabled().unwrap_or(!on));
             }
             "quit" => app.exit(0),

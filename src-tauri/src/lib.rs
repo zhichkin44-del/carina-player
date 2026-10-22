@@ -125,6 +125,10 @@ fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // A second launch (e.g. double-clicking an mp3 while Carina runs) hands its files over.
+        .plugin(tauri_plugin_single_instance::init(|_app, args, _cwd| {
+            engine::open_paths(args.into_iter().skip(1));
+        }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -144,6 +148,7 @@ pub fn run() {
             media::spawn(app.handle().clone());
             engine::spawn(app.handle().clone());
             tray::init(app.handle())?;
+            engine::open_paths(std::env::args().skip(1));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -154,6 +159,7 @@ pub fn run() {
             engine::play_folder,
             engine::play_tracks,
             engine::queue_jump,
+            engine::open_files,
             engine::queue_play_next,
             engine::queue_add,
             engine::queue_remove,
