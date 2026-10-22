@@ -53,6 +53,24 @@ pub fn media_previous() {
     send(Command::Previous);
 }
 
+/// Which session to show, from `(app id, is playing)` pairs: one that is playing wins — the one
+/// we already show, then the system's current, then any; with nothing playing we stay on the one
+/// we showed (so Play resumes it), else fall back to the system's current, else the first.
+pub fn pick(sessions: &[(String, bool)], current: Option<&str>, shown: Option<&str>) -> Option<usize> {
+    let find = |id: Option<&str>, playing_only: bool| {
+        let id = id?;
+        sessions
+            .iter()
+            .position(|(s, playing)| s == id && (*playing || !playing_only))
+    };
+    find(shown, true)
+        .or_else(|| find(current, true))
+        .or_else(|| sessions.iter().position(|(_, playing)| *playing))
+        .or_else(|| find(shown, false))
+        .or_else(|| find(current, false))
+        .or_else(|| (!sessions.is_empty()).then_some(0))
+}
+
 /// Start the background thread that polls the system session and emits `now-playing`.
 pub fn spawn(app: AppHandle) {
     let (tx, rx) = channel();
@@ -70,13 +88,15 @@ fn run(app: AppHandle, rx: Receiver<Command>) {
         return;
     };
     let mut last = NowPlaying::default();
+    // App id of the session on the widget, so we don't jump between players.
+    let mut shown: Option<String> = None;
     loop {
         match rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(cmd) => system::command(&manager, cmd),
+            Ok(cmd) => system::command(&manager, &shown, cmd),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
-        let now = system::read(&manager, &last).unwrap_or_default();
+        let now = system::read(&manager, &mut shown, &last).unwrap_or_default();
         if now != last {
             let _ = app.emit("now-playing", &now);
             last = now;
@@ -101,7 +121,7 @@ mod system {
     use windows::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
     use windows::core::Result;
 
-    use super::{Command, NowPlaying};
+    use super::{Command, NowPlaying, pick};
 
     /// WinRT time unit: 100 ns.
     const TICKS_PER_SECOND: f64 = 10_000_000.0;
@@ -110,8 +130,28 @@ mod system {
         Manager::RequestAsync()?.join()
     }
 
-    pub fn command(manager: &Manager, cmd: Command) {
-        let Ok(session) = manager.GetCurrentSession() else {
+    /// The session to show and control, and its app id.
+    fn session(manager: &Manager, shown: &Option<String>) -> Result<Option<(Session, String)>> {
+        let list = manager.GetSessions()?;
+        let mut sessions = Vec::new();
+        let mut keys = Vec::new();
+        for i in 0..list.Size()? {
+            let session = list.GetAt(i)?;
+            let id = session.SourceAppUserModelId()?.to_string();
+            let playing = session.GetPlaybackInfo()?.PlaybackStatus()? == Status::Playing;
+            keys.push((id.clone(), playing));
+            sessions.push((session, id));
+        }
+        let current = manager
+            .GetCurrentSession()
+            .and_then(|s| s.SourceAppUserModelId())
+            .map(|id| id.to_string())
+            .ok();
+        Ok(pick(&keys, current.as_deref(), shown.as_deref()).map(|i| sessions.swap_remove(i)))
+    }
+
+    pub fn command(manager: &Manager, shown: &Option<String>, cmd: Command) {
+        let Ok(Some((session, _))) = session(manager, shown) else {
             return;
         };
         let op = match cmd {
@@ -124,8 +164,16 @@ mod system {
         }
     }
 
-    pub fn read(manager: &Manager, last: &NowPlaying) -> Result<NowPlaying> {
-        let session = manager.GetCurrentSession()?;
+    pub fn read(
+        manager: &Manager,
+        shown: &mut Option<String>,
+        last: &NowPlaying,
+    ) -> Result<NowPlaying> {
+        let Some((session, id)) = session(manager, shown)? else {
+            *shown = None;
+            return Ok(NowPlaying::default());
+        };
+        *shown = Some(id);
         let props = session.TryGetMediaPropertiesAsync()?.join()?;
         let playing = session.GetPlaybackInfo()?.PlaybackStatus()? == Status::Playing;
         let mut now = NowPlaying {
@@ -180,5 +228,48 @@ mod system {
             "data:{mime};base64,{}",
             base64::engine::general_purpose::STANDARD.encode(bytes)
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick;
+
+    fn s(list: &[(&str, bool)]) -> Vec<(String, bool)> {
+        list.iter().map(|(id, p)| (id.to_string(), *p)).collect()
+    }
+
+    #[test]
+    fn playing_session_beats_systems_paused_current() {
+        // The bug from the prototype: Windows made a paused player "current".
+        let list = s(&[("chrome", true), ("aimp", false)]);
+        assert_eq!(pick(&list, Some("aimp"), Some("chrome")), Some(0));
+        assert_eq!(pick(&list, Some("aimp"), None), Some(0));
+    }
+
+    #[test]
+    fn stays_on_shown_player_when_it_is_paused() {
+        let list = s(&[("chrome", false), ("aimp", false)]);
+        assert_eq!(pick(&list, Some("aimp"), Some("chrome")), Some(0));
+    }
+
+    #[test]
+    fn switches_when_another_player_starts() {
+        let list = s(&[("chrome", false), ("spotify", true)]);
+        assert_eq!(pick(&list, Some("chrome"), Some("chrome")), Some(1));
+    }
+
+    #[test]
+    fn two_playing_keeps_the_shown_one() {
+        let list = s(&[("chrome", true), ("spotify", true)]);
+        assert_eq!(pick(&list, Some("chrome"), Some("spotify")), Some(1));
+    }
+
+    #[test]
+    fn shown_player_closed_falls_back_to_current_then_first() {
+        let list = s(&[("a", false), ("b", false)]);
+        assert_eq!(pick(&list, Some("b"), Some("gone")), Some(1));
+        assert_eq!(pick(&list, None, Some("gone")), Some(0));
+        assert_eq!(pick(&[], None, None), None);
     }
 }

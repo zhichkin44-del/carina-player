@@ -2,6 +2,7 @@
 mod desktop;
 mod layout;
 mod media;
+mod position;
 
 use tauri::Manager;
 
@@ -23,11 +24,34 @@ fn set_glass(window: tauri::WebviewWindow, blur: bool) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Where the user left the widget, if that spot is still on a screen; else the bottom-right
+/// corner of the primary monitor.
 fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.primary_monitor()? else {
         return Ok(());
     };
     let scale = monitor.scale_factor();
+    let size = (
+        (WIDGET_SIZE.0 * scale).round() as i32,
+        (WIDGET_SIZE.1 * scale).round() as i32,
+    );
+
+    let screens: Vec<layout::Rect> = window
+        .available_monitors()?
+        .iter()
+        .map(|m| layout::Rect {
+            x: m.position().x,
+            y: m.position().y,
+            w: m.size().width as i32,
+            h: m.size().height as i32,
+        })
+        .collect();
+    if let Some(saved) = position::load(window.app_handle())
+        && layout::fits((saved.x, saved.y), size, &screens)
+    {
+        return window.set_position(tauri::PhysicalPosition::new(saved.x, saved.y));
+    }
+
     let area = monitor.work_area();
     let work = layout::Rect {
         x: area.position.x,
@@ -35,10 +59,6 @@ fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
         w: area.size.width as i32,
         h: area.size.height as i32,
     };
-    let size = (
-        (WIDGET_SIZE.0 * scale).round() as i32,
-        (WIDGET_SIZE.1 * scale).round() as i32,
-    );
     let (x, y) = layout::bottom_right(work, size, (WIDGET_MARGIN * scale).round() as i32);
     window.set_position(tauri::PhysicalPosition::new(x, y))
 }
@@ -52,6 +72,7 @@ pub fn run() {
                 .get_webview_window("widget")
                 .expect("widget window is declared in tauri.conf.json");
             place_widget(&widget)?;
+            position::track(&widget);
             // Show through Tauri first: it owns the window styles and rewrites them on show.
             widget.show()?;
             #[cfg(windows)]
