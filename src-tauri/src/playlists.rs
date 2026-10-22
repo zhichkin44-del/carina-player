@@ -70,7 +70,11 @@ fn tracks_of<'a>(store: &'a mut Store, id: &str) -> Option<&'a mut Vec<String>> 
     if id == FAVORITES {
         Some(&mut store.favorites)
     } else {
-        store.playlists.iter_mut().find(|p| p.id == id).map(|p| &mut p.tracks)
+        store
+            .playlists
+            .iter_mut()
+            .find(|p| p.id == id)
+            .map(|p| &mut p.tracks)
     }
 }
 
@@ -86,7 +90,10 @@ pub fn add_unique(list: &mut Vec<String>, paths: &[String]) -> usize {
 }
 
 fn new_id(store: &Store) -> String {
-    (1..).map(|n| format!("p{n}")).find(|id| !store.playlists.iter().any(|p| &p.id == id)).unwrap()
+    (1..)
+        .map(|n| format!("p{n}"))
+        .find(|id| !store.playlists.iter().any(|p| &p.id == id))
+        .unwrap()
 }
 
 #[tauri::command]
@@ -124,9 +131,21 @@ pub async fn playlist_tracks(app: AppHandle, id: String) -> Vec<TrackInfo> {
 pub async fn playlist_create(app: AppHandle, name: String, paths: Vec<String>) -> PlaylistSummary {
     edit(&app, |store| {
         let id = new_id(store);
-        let name = if name.trim().is_empty() { format!("Плейлист {}", store.playlists.len() + 1) } else { name.trim().to_string() };
-        store.playlists.push(Playlist { id: id.clone(), name: name.clone(), tracks: paths.clone() });
-        PlaylistSummary { id, name, count: paths.len() }
+        let name = if name.trim().is_empty() {
+            format!("Плейлист {}", store.playlists.len() + 1)
+        } else {
+            name.trim().to_string()
+        };
+        store.playlists.push(Playlist {
+            id: id.clone(),
+            name: name.clone(),
+            tracks: paths.clone(),
+        });
+        PlaylistSummary {
+            id,
+            name,
+            count: paths.len(),
+        }
     })
 }
 
@@ -148,7 +167,11 @@ pub async fn playlist_delete(app: AppHandle, id: String) {
 
 #[tauri::command]
 pub async fn playlist_add(app: AppHandle, id: String, paths: Vec<String>) -> usize {
-    edit(&app, |store| tracks_of(store, &id).map(|t| add_unique(t, &paths)).unwrap_or(0))
+    edit(&app, |store| {
+        tracks_of(store, &id)
+            .map(|t| add_unique(t, &paths))
+            .unwrap_or(0)
+    })
 }
 
 #[tauri::command]
@@ -200,7 +223,10 @@ mod tests {
     #[test]
     fn adding_skips_duplicates() {
         let mut list = vec!["a".to_string()];
-        assert_eq!(add_unique(&mut list, &["a".into(), "b".into(), "b".into()]), 1);
+        assert_eq!(
+            add_unique(&mut list, &["a".into(), "b".into(), "b".into()]),
+            1
+        );
         assert_eq!(list, vec!["a", "b"]);
     }
 
@@ -209,8 +235,14 @@ mod tests {
         let store = Store {
             favorites: vec![],
             playlists: vec![
-                Playlist { id: "p1".into(), ..Default::default() },
-                Playlist { id: "p3".into(), ..Default::default() },
+                Playlist {
+                    id: "p1".into(),
+                    ..Default::default()
+                },
+                Playlist {
+                    id: "p3".into(),
+                    ..Default::default()
+                },
             ],
         };
         assert_eq!(new_id(&store), "p2");

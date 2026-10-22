@@ -68,22 +68,38 @@ fn send(cmd: Command) {
 
 #[tauri::command]
 pub fn media_toggle() {
-    if engine::active() { engine::send(engine::Cmd::Toggle) } else { send(Command::Toggle) }
+    if engine::active() {
+        engine::send(engine::Cmd::Toggle)
+    } else {
+        send(Command::Toggle)
+    }
 }
 
 #[tauri::command]
 pub fn media_next() {
-    if engine::active() { engine::send(engine::Cmd::Next) } else { send(Command::Next) }
+    if engine::active() {
+        engine::send(engine::Cmd::Next)
+    } else {
+        send(Command::Next)
+    }
 }
 
 #[tauri::command]
 pub fn media_previous() {
-    if engine::active() { engine::send(engine::Cmd::Previous) } else { send(Command::Previous) }
+    if engine::active() {
+        engine::send(engine::Cmd::Previous)
+    } else {
+        send(Command::Previous)
+    }
 }
 
 #[tauri::command]
 pub fn media_seek(seconds: f64) {
-    if engine::active() { engine::send(engine::Cmd::Seek(seconds)) } else { send(Command::Seek(seconds)) }
+    if engine::active() {
+        engine::send(engine::Cmd::Seek(seconds))
+    } else {
+        send(Command::Seek(seconds))
+    }
 }
 
 /// Which session to show, from `(app id, is playing)` pairs: one that is playing wins — the one

@@ -34,6 +34,17 @@ pub fn styles(hwnd: HWND, focusable: bool) {
     }
 }
 
+/// After Tauri shows a hidden widget again: restore our styles, owner and z-order.
+pub fn pin_again(hwnd: HWND) {
+    styles(hwnd, false);
+    unsafe {
+        if let Ok(progman) = FindWindowW(w!("Progman"), None) {
+            SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, progman.0 as isize);
+        }
+    }
+    send_to_bottom(hwnd);
+}
+
 /// Pin the widget to the desktop: owned by Progman, no focus, survives Win+D.
 pub fn pin(hwnd: HWND) {
     WIDGET.store(hwnd.0 as isize, Ordering::Relaxed);

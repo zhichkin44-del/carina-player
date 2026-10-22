@@ -27,7 +27,11 @@ pub fn file(path: &Path) -> FileReport {
 
     let t = Instant::now();
     let Some(mut source) = engine::open(path) else {
-        return FileReport { name: name(path), info: String::new(), problems: vec!["decoder: cannot open".into()] };
+        return FileReport {
+            name: name(path),
+            info: String::new(),
+            problems: vec!["decoder: cannot open".into()],
+        };
     };
     let open_ms = t.elapsed().as_millis();
     let (rate, channels) = (source.sample_rate(), source.channels());
@@ -55,7 +59,10 @@ pub fn file(path: &Path) -> FileReport {
     if let Some(d) = decoded
         && (d - track.duration).abs() > 1.0
     {
-        problems.push(format!("duration: tags {:.1}s vs decoder {d:.1}s", track.duration));
+        problems.push(format!(
+            "duration: tags {:.1}s vs decoder {d:.1}s",
+            track.duration
+        ));
     }
     FileReport {
         name: name(path),
@@ -63,7 +70,11 @@ pub fn file(path: &Path) -> FileReport {
             "{rate} Hz {channels}ch {:.0}s | '{}' / '{}' | cover {} | tags {tag_ms}ms open {open_ms}ms seek {seek_ms}ms",
             track.duration,
             track.title,
-            if track.artist.is_empty() { "-" } else { &track.artist },
+            if track.artist.is_empty() {
+                "-"
+            } else {
+                &track.artist
+            },
             if cover { "yes" } else { "no" },
         ),
         problems,
@@ -71,7 +82,9 @@ pub fn file(path: &Path) -> FileReport {
 }
 
 fn name(path: &Path) -> String {
-    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Check every audio file under `dir`; returns (files, failed).

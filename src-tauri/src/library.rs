@@ -180,7 +180,12 @@ fn cache_file(app: &AppHandle) -> Option<PathBuf> {
 /// File version: a changed file (re-tagged, replaced) is read again.
 fn stamp(path: &Path) -> Option<(u64, u64)> {
     let meta = std::fs::metadata(path).ok()?;
-    let modified = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    let modified = meta
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs();
     Some((modified, meta.len()))
 }
 
@@ -255,7 +260,13 @@ pub fn cover_of(path: &Path) -> Option<String> {
                 && matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "webp")
                 && let Ok(bytes) = std::fs::read(&p)
             {
-                let mime = if ext == "png" { "image/png" } else if ext == "webp" { "image/webp" } else { "image/jpeg" };
+                let mime = if ext == "png" {
+                    "image/png"
+                } else if ext == "webp" {
+                    "image/webp"
+                } else {
+                    "image/jpeg"
+                };
                 return Some(data_url(mime, &bytes));
             }
         }
@@ -269,12 +280,18 @@ fn embedded_cover(path: &Path) -> Option<String> {
     let file = lofty::read_from_path(path).ok()?;
     let tag = file.primary_tag().or_else(|| file.first_tag())?;
     let pic = tag.pictures().first()?;
-    let mime = pic.mime_type().map(|m| m.as_str().to_string()).unwrap_or("image/jpeg".into());
+    let mime = pic
+        .mime_type()
+        .map(|m| m.as_str().to_string())
+        .unwrap_or("image/jpeg".into());
     Some(data_url(&mime, pic.data()))
 }
 
 fn data_url(mime: &str, bytes: &[u8]) -> String {
-    format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
 }
 
 // ---- library roots (persisted) ----
@@ -322,7 +339,10 @@ pub async fn library_roots(app: AppHandle) -> Vec<FolderEntry> {
         .iter()
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
-        .map(|p| FolderEntry { name: name_of(&p), path: p.to_string_lossy().into_owned() })
+        .map(|p| FolderEntry {
+            name: name_of(&p),
+            path: p.to_string_lossy().into_owned(),
+        })
         .collect()
 }
 
@@ -340,7 +360,10 @@ pub async fn library_add(app: AppHandle, path: String) -> Result<FolderEntry, St
         config.folders.push(path);
         save(&app, &config);
     }
-    Ok(FolderEntry { name: name_of(&dir), path: dir.to_string_lossy().into_owned() })
+    Ok(FolderEntry {
+        name: name_of(&dir),
+        path: dir.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]
@@ -360,7 +383,10 @@ pub async fn library_open(app: AppHandle, path: String) -> Result<FolderView, St
         folders: dirs
             .into_iter()
             .filter(|d| has_audio(d, 1))
-            .map(|d| FolderEntry { name: name_of(&d), path: d.to_string_lossy().into_owned() })
+            .map(|d| FolderEntry {
+                name: name_of(&d),
+                path: d.to_string_lossy().into_owned(),
+            })
             .collect(),
         tracks: {
             let tracks = read_tracks(&app, &files);
@@ -377,9 +403,17 @@ pub async fn library_cover(app: AppHandle, path: String) -> Result<Option<String
 
 /// Tracks under `path` whose file path (folders included) or tags match every word of `query`.
 #[tauri::command]
-pub async fn library_search(app: AppHandle, path: String, query: String) -> Result<Vec<TrackInfo>, String> {
+pub async fn library_search(
+    app: AppHandle,
+    path: String,
+    query: String,
+) -> Result<Vec<TrackInfo>, String> {
     let dir = check(&app, &path)?;
-    let words: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+    let words: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .map(String::from)
+        .collect();
     if words.is_empty() {
         return Ok(Vec::new());
     }
@@ -387,7 +421,11 @@ pub async fn library_search(app: AppHandle, path: String, query: String) -> Resu
     collect(&dir, 0, &mut files);
     let mut found = Vec::new();
     for f in files {
-        let rel = f.strip_prefix(&dir).unwrap_or(&f).to_string_lossy().to_lowercase();
+        let rel = f
+            .strip_prefix(&dir)
+            .unwrap_or(&f)
+            .to_string_lossy()
+            .to_lowercase();
         if words.iter().all(|w| rel.contains(w)) {
             found.push(track_info(&app, &f));
         } else {
@@ -428,7 +466,13 @@ mod tests {
     fn folders_without_music_are_hidden_and_collect_walks_in_order() {
         let root = std::env::temp_dir().join(format!("carina-lib-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for p in ["A/2. b.mp3", "A/10. c.mp3", "A/Sub/1. d.flac", "Empty/notes.txt", "Art/cover.jpg"] {
+        for p in [
+            "A/2. b.mp3",
+            "A/10. c.mp3",
+            "A/Sub/1. d.flac",
+            "Empty/notes.txt",
+            "Art/cover.jpg",
+        ] {
             let f = root.join(p);
             std::fs::create_dir_all(f.parent().unwrap()).unwrap();
             std::fs::write(f, b"x").unwrap();

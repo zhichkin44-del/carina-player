@@ -1,13 +1,16 @@
-#[cfg(windows)]
-mod desktop;
 #[doc(hidden)]
 pub mod check;
+#[cfg(windows)]
+mod desktop;
 mod engine;
 mod layout;
 mod library;
 mod media;
 mod playlists;
 mod position;
+#[cfg(windows)]
+mod smtc;
+mod tray;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -49,7 +52,10 @@ fn set_panel(window: tauri::WebviewWindow, open: bool) -> tauri::Result<&'static
         PANEL_UP.store(up, Ordering::Relaxed);
         position::suspend(true);
         if up {
-            window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y - (tall - compact)))?;
+            window.set_position(tauri::PhysicalPosition::new(
+                pos.x,
+                pos.y - (tall - compact),
+            ))?;
         }
         window.set_size(tauri::PhysicalSize::new(width, tall as u32))?;
         window.set_focusable(true)?;
@@ -64,7 +70,10 @@ fn set_panel(window: tauri::WebviewWindow, open: bool) -> tauri::Result<&'static
         let up = PANEL_UP.load(Ordering::Relaxed);
         window.set_size(tauri::PhysicalSize::new(width, compact as u32))?;
         if up {
-            window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y + (tall - compact)))?;
+            window.set_position(tauri::PhysicalPosition::new(
+                pos.x,
+                pos.y + (tall - compact),
+            ))?;
         }
         window.set_focusable(false)?;
         #[cfg(windows)]
@@ -116,6 +125,7 @@ fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -129,9 +139,11 @@ pub fn run() {
             #[cfg(windows)]
             {
                 desktop::pin(widget.hwnd()?);
+                let _ = smtc::init(widget.hwnd()?);
             }
             media::spawn(app.handle().clone());
             engine::spawn(app.handle().clone());
+            tray::init(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

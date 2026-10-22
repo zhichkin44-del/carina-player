@@ -135,7 +135,11 @@ pub fn remove_at<T>(queue: &mut Vec<T>, index: usize, at: usize) -> usize {
         return index;
     }
     queue.remove(at);
-    if at < index { index - 1 } else { index.min(queue.len().saturating_sub(1)) }
+    if at < index {
+        index - 1
+    } else {
+        index.min(queue.len().saturating_sub(1))
+    }
 }
 
 /// Move item `from` to `to`, keeping `index` on the same track.
@@ -157,13 +161,19 @@ pub fn move_item<T>(queue: &mut Vec<T>, index: usize, from: usize, to: usize) ->
 }
 
 fn seed() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(7)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(7)
 }
 
 // ---- output device ----
 
 fn default_device_id() -> Option<rodio::cpal::DeviceId> {
-    rodio::cpal::default_host().default_output_device()?.id().ok()
+    rodio::cpal::default_host()
+        .default_output_device()?
+        .id()
+        .ok()
 }
 
 /// Open the default output; `failed` is raised if the device disappears mid-stream.
@@ -270,10 +280,17 @@ impl Engine {
                 continue;
             }
             let now = self.now_playing();
-            let changed = NowPlaying { position: 0.0, ..now.clone() }
-                != NowPlaying { position: 0.0, ..last.clone() };
+            let changed = NowPlaying {
+                position: 0.0,
+                ..now.clone()
+            } != NowPlaying {
+                position: 0.0,
+                ..last.clone()
+            };
             if changed || force {
                 let _ = self.app.emit("now-playing", &now);
+                #[cfg(windows)]
+                crate::smtc::update(&now);
                 last = now;
             }
         }
@@ -289,7 +306,9 @@ impl Engine {
                     self.unshuffled = queue.clone();
                     let mut rest = queue;
                     let first = rest.remove(start);
-                    self.queue = std::iter::once(first).chain(shuffled(rest, seed())).collect();
+                    self.queue = std::iter::once(first)
+                        .chain(shuffled(rest, seed()))
+                        .collect();
                     self.load(0, true);
                 } else {
                     self.unshuffled.clear();
@@ -328,7 +347,11 @@ impl Engine {
                 self.emit_queue();
             }
             Cmd::PlayNext(paths) => {
-                let at = if self.queue.is_empty() { 0 } else { self.index + 1 };
+                let at = if self.queue.is_empty() {
+                    0
+                } else {
+                    self.index + 1
+                };
                 let start_now = self.queue.is_empty();
                 self.queue.splice(at..at, paths);
                 self.after_edit(start_now);
@@ -347,6 +370,8 @@ impl Engine {
                     self.track = None;
                     ACTIVE.store(false, Ordering::Relaxed);
                     let _ = self.app.emit("now-playing", NowPlaying::default());
+                    #[cfg(windows)]
+                    crate::smtc::update(&NowPlaying::default());
                 } else if current {
                     let playing = self.loaded && !self.player.is_paused();
                     self.load(self.index, playing);
@@ -393,14 +418,20 @@ impl Engine {
     }
 
     fn position(&self) -> f64 {
-        if self.loaded { self.player.get_pos().as_secs_f64() } else { 0.0 }
+        if self.loaded {
+            self.player.get_pos().as_secs_f64()
+        } else {
+            0.0
+        }
     }
 
     fn seek(&mut self, seconds: f64) {
         if !self.loaded {
             self.load(self.index, false);
         }
-        let _ = self.player.try_seek(Duration::from_secs_f64(seconds.max(0.0)));
+        let _ = self
+            .player
+            .try_seek(Duration::from_secs_f64(seconds.max(0.0)));
     }
 
     /// Headphones plugged in or out (or the device vanished): move playback to the new default
@@ -447,8 +478,8 @@ impl Engine {
                     track.album = folder.to_string_lossy().into_owned();
                 }
                 self.track = Some(track);
-                self.cover = library::cover_of(&path)
-                    .or_else(|| path.parent().and_then(library::cover_of));
+                self.cover =
+                    library::cover_of(&path).or_else(|| path.parent().and_then(library::cover_of));
                 if play {
                     self.player.play();
                 } else {
@@ -491,7 +522,12 @@ impl Engine {
             .collect();
         let _ = self.app.emit(
             "queue",
-            QueueState { items, index: self.index, shuffle: self.shuffle, repeat: self.repeat },
+            QueueState {
+                items,
+                index: self.index,
+                shuffle: self.shuffle,
+                repeat: self.repeat,
+            },
         );
     }
 
@@ -536,12 +572,18 @@ impl Engine {
         }
         self.index = session.index.min(queue.len() - 1);
         self.queue = queue;
-        self.unshuffled = session.unshuffled.into_iter().filter(|p| p.is_file()).collect();
+        self.unshuffled = session
+            .unshuffled
+            .into_iter()
+            .filter(|p| p.is_file())
+            .collect();
         self.shuffle = session.shuffle;
         self.repeat = session.repeat;
         ACTIVE.store(true, Ordering::Relaxed);
         self.load(self.index, false);
-        let _ = self.player.try_seek(Duration::from_secs_f64(session.position.max(0.0)));
+        let _ = self
+            .player
+            .try_seek(Duration::from_secs_f64(session.position.max(0.0)));
         let _ = self.app.emit("now-playing", self.now_playing());
     }
 }
@@ -549,7 +591,10 @@ impl Engine {
 pub(crate) fn open(path: &Path) -> Option<Decoder<BufReader<File>>> {
     let file = File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
-    let hint = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let hint = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
     Decoder::<BufReader<File>>::builder()
         .with_data(BufReader::new(file))
         .with_byte_len(len)
@@ -572,7 +617,11 @@ fn library_paths(app: &AppHandle, paths: Vec<String>) -> Vec<PathBuf> {
 
 /// Play a folder (with its subfolders) starting at `start` (a track path), or from the top.
 #[tauri::command]
-pub async fn play_folder(app: AppHandle, path: String, start: Option<String>) -> Result<(), String> {
+pub async fn play_folder(
+    app: AppHandle,
+    path: String,
+    start: Option<String>,
+) -> Result<(), String> {
     let dir = PathBuf::from(&path);
     if !library::inside_library(&app, &dir) {
         return Err("Папка не в библиотеке".into());
@@ -589,7 +638,10 @@ pub async fn play_folder(app: AppHandle, path: String, start: Option<String>) ->
 /// Play an explicit list (search results, a playlist) starting at `start`.
 #[tauri::command]
 pub async fn play_tracks(app: AppHandle, paths: Vec<String>, start: usize) {
-    send(Cmd::Play { queue: library_paths(&app, paths), start });
+    send(Cmd::Play {
+        queue: library_paths(&app, paths),
+        start,
+    });
 }
 
 #[tauri::command]
