@@ -21,6 +21,28 @@ pub struct NowPlaying {
     pub duration: f64,
     /// `data:` URL of the cover, if the source provides one.
     pub cover: Option<String>,
+    /// The player allows skipping forward (a player with a one-track queue doesn't).
+    pub can_next: bool,
+    /// Back works: the player skips back, or at least we can restart the track.
+    pub can_previous: bool,
+}
+
+/// What "back" does, given what the player allows.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Back {
+    Skip,
+    Restart,
+    Nothing,
+}
+
+pub fn back_action(previous_enabled: bool, seek_enabled: bool) -> Back {
+    if previous_enabled {
+        Back::Skip
+    } else if seek_enabled {
+        Back::Restart
+    } else {
+        Back::Nothing
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -121,7 +143,7 @@ mod system {
     use windows::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
     use windows::core::Result;
 
-    use super::{Command, NowPlaying, pick};
+    use super::{Back, Command, NowPlaying, back_action, pick};
 
     /// WinRT time unit: 100 ns.
     const TICKS_PER_SECOND: f64 = 10_000_000.0;
@@ -157,7 +179,11 @@ mod system {
         let op = match cmd {
             Command::Toggle => session.TryTogglePlayPauseAsync(),
             Command::Next => session.TrySkipNextAsync(),
-            Command::Previous => session.TrySkipPreviousAsync(),
+            Command::Previous => match back(&session) {
+                Ok(Back::Skip) => session.TrySkipPreviousAsync(),
+                Ok(Back::Restart) => session.TryChangePlaybackPositionAsync(0),
+                _ => return,
+            },
         };
         if let Ok(op) = op {
             let _ = op.join();
@@ -175,8 +201,12 @@ mod system {
         };
         *shown = Some(id);
         let props = session.TryGetMediaPropertiesAsync()?.join()?;
-        let playing = session.GetPlaybackInfo()?.PlaybackStatus()? == Status::Playing;
+        let info = session.GetPlaybackInfo()?;
+        let playing = info.PlaybackStatus()? == Status::Playing;
+        let controls = info.Controls()?;
         let mut now = NowPlaying {
+            can_next: controls.IsNextEnabled()?,
+            can_previous: back(&session)? != Back::Nothing,
             title: props.Title()?.to_string(),
             artist: props.Artist()?.to_string(),
             album: props.AlbumTitle()?.to_string(),
@@ -192,6 +222,11 @@ mod system {
             cover(&props).ok()
         };
         Ok(now)
+    }
+
+    fn back(session: &Session) -> Result<Back> {
+        let c = session.GetPlaybackInfo()?.Controls()?;
+        Ok(back_action(c.IsPreviousEnabled()?, c.IsPlaybackPositionEnabled()?))
     }
 
     /// Position extrapolated to "now": sessions only report it when something changes.
@@ -233,7 +268,15 @@ mod system {
 
 #[cfg(test)]
 mod tests {
-    use super::pick;
+    use super::{Back, back_action, pick};
+
+    #[test]
+    fn back_restarts_track_when_player_has_nothing_before_it() {
+        // Windows Media Player with a single opened file: no previous, but seeking works.
+        assert_eq!(back_action(false, true), Back::Restart);
+        assert_eq!(back_action(true, true), Back::Skip);
+        assert_eq!(back_action(false, false), Back::Nothing);
+    }
 
     fn s(list: &[(&str, bool)]) -> Vec<(String, bool)> {
         list.iter().map(|(id, p)| (id.to_string(), *p)).collect()

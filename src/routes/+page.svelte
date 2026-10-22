@@ -11,6 +11,8 @@
     position: number;
     duration: number;
     cover: string | null;
+    canNext: boolean;
+    canPrevious: boolean;
   };
 
   type Glass = { opacity: number; blur: boolean };
@@ -121,7 +123,12 @@
 
     <div class="bottom" data-tauri-drag-region>
       <nav class="controls">
-        <button class="skip" aria-label="Назад" onclick={() => invoke("media_previous")}>
+        <button
+          class="skip"
+          aria-label="Назад"
+          disabled={!track?.canPrevious}
+          onclick={() => invoke("media_previous")}
+        >
           <svg viewBox="0 0 24 24"><rect x="5" y="5.5" width="2.6" height="13" rx="1.2" /><path d="M19 6.6v10.8a1 1 0 0 1-1.55.83L9.6 13a1.2 1.2 0 0 1 0-2l7.85-5.23A1 1 0 0 1 19 6.6z" /></svg>
         </button>
         <button class="play" aria-label={track?.playing ? "Пауза" : "Играть"} onclick={() => invoke("media_toggle")}>
@@ -131,7 +138,13 @@
             <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
           {/if}
         </button>
-        <button class="skip" aria-label="Вперёд" onclick={() => invoke("media_next")}>
+        <button
+          class="skip"
+          aria-label="Вперёд"
+          disabled={!track?.canNext}
+          title={track && !track.canNext ? "Плеер не даёт переключить: в его очереди нет следующего трека" : undefined}
+          onclick={() => invoke("media_next")}
+        >
           <svg viewBox="0 0 24 24"><rect x="16.4" y="5.5" width="2.6" height="13" rx="1.2" /><path d="M5 6.6v10.8a1 1 0 0 0 1.55.83L14.4 13a1.2 1.2 0 0 0 0-2L6.55 5.77A1 1 0 0 0 5 6.6z" /></svg>
         </button>
       </nav>
@@ -384,6 +397,11 @@
   }
   button:active {
     transform: scale(0.9);
+  }
+  button:disabled {
+    opacity: 0.3;
+    background: transparent;
+    transform: none;
   }
   button svg {
     width: 15px;
