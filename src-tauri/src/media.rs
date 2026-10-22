@@ -179,6 +179,11 @@ mod system {
 
     use super::{Back, Command, NowPlaying, back_action, pick};
 
+    /// How Windows names Carina's own media session: the executable's file name.
+    fn own_app_id() -> Option<String> {
+        Some(std::env::current_exe().ok()?.file_name()?.to_string_lossy().into_owned())
+    }
+
     /// WinRT time unit: 100 ns.
     const TICKS_PER_SECOND: f64 = 10_000_000.0;
 
@@ -191,18 +196,29 @@ mod system {
         let list = manager.GetSessions()?;
         let mut sessions = Vec::new();
         let mut keys = Vec::new();
+        let own = own_app_id();
         for i in 0..list.Size()? {
-            let session = list.GetAt(i)?;
-            let id = session.SourceAppUserModelId()?.to_string();
-            let playing = session.GetPlaybackInfo()?.PlaybackStatus()? == Status::Playing;
-            keys.push((id.clone(), playing));
+            // A session that can't be read (e.g. a closed one) must not hide the others.
+            let Ok(session) = list.GetAt(i) else { continue };
+            let Ok(id) = session.SourceAppUserModelId().map(|id| id.to_string()) else {
+                continue;
+            };
+            // Carina's own playback is shown by the engine, not as "another player".
+            if own.as_deref().is_some_and(|own| id.eq_ignore_ascii_case(own)) {
+                continue;
+            }
+            let Ok(status) = session.GetPlaybackInfo().and_then(|p| p.PlaybackStatus()) else {
+                continue;
+            };
+            keys.push((id.clone(), status == Status::Playing));
             sessions.push((session, id));
         }
         let current = manager
             .GetCurrentSession()
             .and_then(|s| s.SourceAppUserModelId())
             .map(|id| id.to_string())
-            .ok();
+            .ok()
+            .filter(|id| !own.as_deref().is_some_and(|own| id.eq_ignore_ascii_case(own)));
         Ok(pick(&keys, current.as_deref(), shown.as_deref()).map(|i| sessions.swap_remove(i)))
     }
 

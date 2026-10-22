@@ -11,12 +11,16 @@ fn main() -> windows::core::Result<()> {
     let list = manager.GetSessions()?;
     for i in 0..list.Size()? {
         let s = list.GetAt(i)?;
+        let id = s.SourceAppUserModelId()?;
+        let Ok(props) = s.TryGetMediaPropertiesAsync().and_then(|op| op.join()) else {
+            println!("{id} | (unreadable — closed session)");
+            continue;
+        };
         let info = s.GetPlaybackInfo()?;
         let c = info.Controls()?;
-        let props = s.TryGetMediaPropertiesAsync()?.join()?;
         println!(
             "{} | {:?} | '{}' | next={} prev={} play/pause={} seek={}",
-            s.SourceAppUserModelId()?,
+            id,
             info.PlaybackStatus()?,
             props.Title()?,
             c.IsNextEnabled()?,
