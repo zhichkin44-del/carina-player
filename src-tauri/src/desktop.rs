@@ -63,7 +63,7 @@ pub fn glass(hwnd: HWND, tint_abgr: u32) {
                 data: &mut policy,
                 size: std::mem::size_of::<AccentPolicy>(),
             };
-            swca(hwnd, &mut data);
+            let _ = swca(hwnd, &mut data);
         }
         let round = DWMWCP_ROUND;
         let _ = DwmSetWindowAttribute(

@@ -8,9 +8,9 @@ use tauri::Manager;
 /// Widget size in logical pixels (must match `tauri.conf.json`).
 const WIDGET_SIZE: (f64, f64) = (400.0, 132.0);
 const WIDGET_MARGIN: f64 = 24.0;
-/// Glass tint, 0xAABBGGRR: deep space blue at ~35% opacity.
+/// Glass tint, 0xAABBGGRR: deep space blue at ~22% opacity.
 #[cfg(windows)]
-const GLASS_TINT: u32 = 0x5A1A1210;
+const GLASS_TINT: u32 = 0x381A1210;
 
 fn place_widget(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.primary_monitor()? else {
@@ -41,13 +41,14 @@ pub fn run() {
                 .get_webview_window("widget")
                 .expect("widget window is declared in tauri.conf.json");
             place_widget(&widget)?;
+            // Show through Tauri first: it owns the window styles and rewrites them on show.
+            widget.show()?;
             #[cfg(windows)]
             {
                 let hwnd = widget.hwnd()?;
                 desktop::glass(hwnd, GLASS_TINT);
                 desktop::pin(hwnd);
             }
-            widget.show()?;
             media::spawn(app.handle().clone());
             Ok(())
         })
