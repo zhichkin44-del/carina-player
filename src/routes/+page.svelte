@@ -185,7 +185,7 @@
     border-radius: 8px;
     overflow: hidden;
     /* Constant sheen: the opacity setting only darkens the tint, never lightens the glass. */
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.01));
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0));
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
   }
   /* Background opacity: smoked tint over the (optionally blurred) wallpaper. */

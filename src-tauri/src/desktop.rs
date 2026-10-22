@@ -20,12 +20,13 @@ use windows::core::{BOOL, w};
 
 static WIDGET: AtomicIsize = AtomicIsize::new(0);
 
-/// Frosted glass behind the transparent webview + rounded Windows 11 corners.
+/// Blurred wallpaper behind the transparent webview + rounded Windows 11 corners.
 ///
 /// Uses the accent policy (SetWindowCompositionAttribute), not DWM system backdrops: system
 /// backdrops turn into a flat colour when the window is inactive, and the widget is never active.
-/// Without `blur` the native layer is switched off and the page paints the tint itself.
-pub fn glass(hwnd: HWND, tint_abgr: u32, blur: bool) {
+/// Plain blur, no tint: the page paints the user's tint on top; without `blur` the native layer
+/// is off and the wallpaper shows through sharp.
+pub fn glass(hwnd: HWND, blur: bool) {
     #[repr(C)]
     struct AccentPolicy {
         state: u32,
@@ -42,7 +43,7 @@ pub fn glass(hwnd: HWND, tint_abgr: u32, blur: bool) {
     type Swca = unsafe extern "system" fn(HWND, *mut CompositionData) -> BOOL;
 
     const ACCENT_DISABLED: u32 = 0;
-    const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+    const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
     const WCA_ACCENT_POLICY: u32 = 19;
 
     unsafe {
@@ -55,10 +56,11 @@ pub fn glass(hwnd: HWND, tint_abgr: u32, blur: bool) {
         {
             let swca: Swca = std::mem::transmute(f);
             let mut policy = AccentPolicy {
-                state: if blur { ACCENT_ENABLE_ACRYLICBLURBEHIND } else { ACCENT_DISABLED },
+                state: if blur { ACCENT_ENABLE_BLURBEHIND } else { ACCENT_DISABLED },
+                // No flags: with "draw gradient" (2) Windows 11 paints the blur black.
+                // Measured: blur with flags 0 keeps the wallpaper's own brightness.
                 flags: 0,
-                // Acrylic misbehaves with a fully transparent tint.
-                gradient: tint_abgr.max(0x0100_0000),
+                gradient: 0,
                 animation: 0,
             };
             let mut data = CompositionData {
