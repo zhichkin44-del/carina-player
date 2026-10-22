@@ -228,7 +228,7 @@ impl Engine {
     }
 }
 
-fn open(path: &Path) -> Option<Decoder<BufReader<File>>> {
+pub(crate) fn open(path: &Path) -> Option<Decoder<BufReader<File>>> {
     let file = File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     let hint = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();

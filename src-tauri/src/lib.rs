@@ -1,5 +1,7 @@
 #[cfg(windows)]
 mod desktop;
+#[doc(hidden)]
+pub mod check;
 mod engine;
 mod layout;
 mod library;
