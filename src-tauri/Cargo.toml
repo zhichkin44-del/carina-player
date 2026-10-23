@@ -1,7 +1,7 @@
 [package]
 name = "carina"
 version = "0.1.0"
-description = "Carina — lightweight music player with a glass desktop widget"
+description = "Carina by zhichkin44-del — lightweight music player with a glass desktop widget"
 authors = ["zhichkin44-del"]
 edition = "2024"
 

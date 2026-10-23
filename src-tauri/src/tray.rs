@@ -53,9 +53,13 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+    // The developer's mark, as on every product: shown, not clickable.
+    let signature = MenuItem::with_id(app, "signature", "Carina · by zhichkin44-del", false, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
+            &signature,
+            &PredefinedMenuItem::separator(app)?,
             &toggle,
             &autostart,
             &PredefinedMenuItem::separator(app)?,
@@ -66,7 +70,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let on_menu = toggle.clone();
     let on_click = toggle.clone();
     let mut tray = TrayIconBuilder::with_id("carina")
-        .tooltip("Carina")
+        .tooltip("Carina — by zhichkin44-del")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {

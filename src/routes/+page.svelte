@@ -444,7 +444,10 @@
           <input type="range" min="0" max="100" step="1" bind:value={settings.opacity} />
           <span class="value">{settings.opacity}%</span>
         </label>
-        <button class="done" onclick={() => (settingsOpen = false)}>Готово</button>
+        <div class="settings-foot">
+          <span class="signature"><span class="brand">Carina</span><span class="by">by</span><span class="author">zhichkin44-del</span></span>
+          <button class="done" onclick={() => (settingsOpen = false)}>Готово</button>
+        </div>
       </section>
     {:else}
       <section class="info" data-tauri-drag-region>
@@ -920,8 +923,42 @@
     min-width: 0;
     accent-color: #fff;
   }
+  .settings-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  /* The developer's mark, the same on every product: "by zhichkin44-del". */
+  .signature {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
+  .signature .brand {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgb(255 255 255 / 0.9);
+  }
+  .signature .by {
+    font-size: 10px;
+    font-style: italic;
+    color: rgb(255 255 255 / 0.45);
+  }
+  .signature .author {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    background: linear-gradient(90deg, #f3d9ff, #9fb8ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    /* text-shadow would paint over the clipped gradient */
+    text-shadow: none;
+    filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.5));
+  }
   .done {
-    align-self: flex-end;
     width: auto;
     height: 24px;
     padding: 0 12px;
