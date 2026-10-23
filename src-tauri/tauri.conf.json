@@ -36,7 +36,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -61,9 +63,19 @@
         "role": "Viewer"
       }
     ],
-    "shortDescription": "Carina by zhichkin44-del — лёгкий музыкальный плеер-виджет",
+    "shortDescription": "Лёгкий музыкальный плеер-виджет, by zhichkin44-del",
     "publisher": "zhichkin44-del",
     "copyright": "© 2026 zhichkin44-del",
-    "longDescription": "Carina by zhichkin44-del: стеклянный виджет на рабочем столе, свой аудиодвижок, музыкальные папки как плейлисты."
+    "longDescription": "Carina: стеклянный виджет на рабочем столе, свой аудиодвижок, музыкальные папки как плейлисты. by zhichkin44-del",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Russian"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
   }
 }

@@ -43,6 +43,11 @@ fn toggle_widget(app: &AppHandle, item: &MenuItem<tauri::Wry>) {
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     first_run_autostart(app);
+    // Re-register on every start so autostart always points at this copy of Carina
+    // (after installing, updating or moving the program).
+    if app.autolaunch().is_enabled().unwrap_or(false) {
+        let _ = app.autolaunch().enable();
+    }
     let toggle = MenuItem::with_id(app, "toggle", HIDE, true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(
         app,
@@ -54,7 +59,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     )?;
     let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
     // The developer's mark, as on every product: shown, not clickable.
-    let signature = MenuItem::with_id(app, "signature", "Carina · by zhichkin44-del", false, None::<&str>)?;
+    let signature = MenuItem::with_id(app, "signature", "by zhichkin44-del", false, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -70,7 +75,7 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let on_menu = toggle.clone();
     let on_click = toggle.clone();
     let mut tray = TrayIconBuilder::with_id("carina")
-        .tooltip("Carina — by zhichkin44-del")
+        .tooltip("Carina")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {

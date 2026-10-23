@@ -445,7 +445,7 @@
           <span class="value">{settings.opacity}%</span>
         </label>
         <div class="settings-foot">
-          <span class="signature"><span class="brand">Carina</span><span class="by">by</span><span class="author">zhichkin44-del</span></span>
+          <span class="signature"><span class="by">by</span><span class="author">zhichkin44-del</span></span>
           <button class="done" onclick={() => (settingsOpen = false)}>Готово</button>
         </div>
       </section>
@@ -934,12 +934,6 @@
     align-items: baseline;
     gap: 5px;
     text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
-  }
-  .signature .brand {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: rgb(255 255 255 / 0.9);
   }
   .signature .by {
     font-size: 10px;
