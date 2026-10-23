@@ -173,6 +173,8 @@ pub fn run() {
             library::library_open,
             library::library_cover,
             library::library_search,
+            library::folder_tracks,
+            playlists::playlist_cover,
             playlists::playlists,
             playlists::playlist_tracks,
             playlists::playlist_create,

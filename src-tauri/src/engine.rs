@@ -78,6 +78,9 @@ struct Session {
     repeat: Repeat,
     /// Queue order before shuffling, to restore it when shuffle is switched off.
     unshuffled: Vec<PathBuf>,
+    /// Sessions saved before "repeat all" became the default (23.10.2026) get it switched on once.
+    #[serde(default)]
+    repeat_default_applied: bool,
 }
 
 static TX: OnceLock<Mutex<Sender<Cmd>>> = OnceLock::new();
@@ -211,7 +214,8 @@ pub fn spawn(app: AppHandle) {
             unshuffled: Vec::new(),
             index: 0,
             shuffle: false,
-            repeat: Repeat::Off,
+            // A folder keeps playing in a loop unless the user switches repeat off.
+            repeat: Repeat::All,
             track: None,
             cover: None,
             loaded: false,
@@ -560,6 +564,7 @@ impl Engine {
             shuffle: self.shuffle,
             repeat: self.repeat,
             unshuffled: self.unshuffled.clone(),
+            repeat_default_applied: true,
         };
         if let Some(dir) = file.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -590,7 +595,7 @@ impl Engine {
             .filter(|p| p.is_file())
             .collect();
         self.shuffle = session.shuffle;
-        self.repeat = session.repeat;
+        self.repeat = if session.repeat_default_applied { session.repeat } else { Repeat::All };
         ACTIVE.store(true, Ordering::Relaxed);
         self.load(self.index, false);
         let _ = self

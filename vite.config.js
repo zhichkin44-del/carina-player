@@ -24,6 +24,8 @@ export default defineConfig(() => ({
           port: 1421,
         }
       : undefined,
+    // The /preview stand loads a wallpaper from design/.
+    fs: { allow: ["design"] },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

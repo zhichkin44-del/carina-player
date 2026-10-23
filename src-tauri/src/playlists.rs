@@ -196,6 +196,16 @@ pub async fn playlist_move(app: AppHandle, id: String, from: usize, to: usize) {
     });
 }
 
+/// Cover for a playlist tile: the first track (or its folder) that has art.
+#[tauri::command]
+pub async fn playlist_cover(app: AppHandle, id: String) -> Option<String> {
+    let mut store = load(&app);
+    let paths = tracks_of(&mut store, &id).cloned().unwrap_or_default();
+    paths.iter().take(8).map(PathBuf::from).find_map(|p| {
+        library::cover_of(&p).or_else(|| p.parent().and_then(library::cover_of))
+    })
+}
+
 /// ♥ on/off; returns the new state.
 #[tauri::command]
 pub async fn favorite_toggle(app: AppHandle, path: String) -> bool {

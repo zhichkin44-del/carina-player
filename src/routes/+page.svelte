@@ -76,7 +76,14 @@
   let listTracks = $state<TrackInfo[]>([]);
   let favorites = $state<Set<string>>(new Set());
   let naming = $state<{ id: string | null; name: string; paths: string[] } | null>(null);
-  let menu = $state<{ paths: string[]; x: number; y: number; lists: boolean } | null>(null);
+  let menu = $state<{
+    paths: string[];
+    folder: FolderEntry | null;
+    x: number;
+    y: number;
+    lists: boolean;
+  } | null>(null);
+  let listCovers = $state<Record<string, string | null>>({});
   let drag = $state<{ from: number; over: number } | null>(null);
   let notice = $state("");
   let volumeShown = $state(false);
@@ -197,12 +204,48 @@
     await loadLists();
   }
 
-  async function addToList(l: PlaylistSummary, paths: string[]) {
-    const added = await invoke<number>("playlist_add", { id: l.id, paths });
-    say(added ? `Добавлено в «${l.name}»` : `Уже есть в «${l.name}»`);
+  /// Tracks the open menu acts on: the clicked track, or a whole folder with its subfolders.
+  async function menuPaths(): Promise<string[]> {
+    if (!menu) return [];
+    if (menu.folder) return invoke<string[]>("folder_tracks", { path: menu.folder.path });
+    return menu.paths;
+  }
+
+  async function addToList(l: PlaylistSummary) {
+    const paths = await menuPaths();
     menu = null;
+    const added = await invoke<number>("playlist_add", { id: l.id, paths });
+    say(added ? `+${added} тр. в «${l.name}»` : `Уже есть в «${l.name}»`);
     await loadLists();
   }
+
+  /// A folder becomes a playlist in one click, named after the folder.
+  async function newListFromFolder(folder: FolderEntry) {
+    const paths = await menuPaths();
+    menu = null;
+    const created = await invoke<PlaylistSummary>("playlist_create", { name: folder.name, paths });
+    say(`Плейлист «${created.name}»: ${paths.length} тр.`);
+    await loadLists();
+  }
+
+  async function playList(l: PlaylistSummary) {
+    const tracks = await invoke<TrackInfo[]>("playlist_tracks", { id: l.id });
+    if (tracks.length) invoke("play_tracks", { paths: tracks.map((t) => t.path), start: 0 });
+  }
+
+  // Playlist tiles get a cover from their first tracks.
+  $effect(() => {
+    if (tab !== "playlists") return;
+    const ids = lists.map((l) => `${l.id}:${l.count}`);
+    (async () => {
+      for (const key of ids) {
+        if (key in listCovers) continue;
+        listCovers[key] = null;
+        const id = key.slice(0, key.lastIndexOf(":"));
+        listCovers[key] = await invoke<string | null>("playlist_cover", { id }).catch(() => null);
+      }
+    })();
+  });
 
   async function removeFromList(path: string) {
     if (!openList) return;
@@ -211,25 +254,29 @@
     lists = await invoke<PlaylistSummary[]>("playlists");
   }
 
-  function openMenu(e: MouseEvent, paths: string[]) {
+  function openMenu(e: MouseEvent, paths: string[], folder: FolderEntry | null = null, toLists = false) {
+    e.preventDefault();
+    e.stopPropagation();
     const panel = (e.currentTarget as HTMLElement).closest(".panel")!.getBoundingClientRect();
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     // Right under the button; above it when there is no room below.
-    const height = 104;
+    const height = folder ? 140 : 104;
     const below = box.bottom - panel.top + 2;
     menu = {
       paths,
+      folder,
       x: Math.max(8, Math.min(box.right - panel.left - 184, panel.width - 196)),
       y: below + height <= panel.height - 8 ? below : Math.max(8, box.top - panel.top - height - 2),
-      lists: false,
+      lists: toLists,
     };
-    if (!lists.length) loadLists();
+    loadLists();
   }
 
-  function queueAction(kind: "next" | "add", paths: string[]) {
-    invoke(kind === "next" ? "queue_play_next" : "queue_add", { paths });
-    say(kind === "next" ? "Сыграет следующим" : "Добавлено в очередь");
+  async function queueAction(kind: "next" | "add") {
+    const paths = await menuPaths();
     menu = null;
+    invoke(kind === "next" ? "queue_play_next" : "queue_add", { paths });
+    say(kind === "next" ? "Сыграет следующим" : `В очереди +${paths.length} тр.`);
   }
 
   // ---- reordering by dragging the grip (queue and playlists) ----
@@ -402,7 +449,7 @@
 {/snippet}
 
 {#snippet tile(f: FolderEntry, removable: boolean)}
-  <div class="tile">
+  <div class="tile" role="group" oncontextmenu={(e) => openMenu(e, [], f)}>
     <button class="art" onclick={() => openFolder(f.path)} aria-label={f.name}>
       {#if covers[f.path]}
         <img src={covers[f.path]} alt="" draggable="false" />
@@ -413,6 +460,7 @@
     <button class="tile-play" aria-label="Играть папку" onclick={() => playFolder(f.path)}>
       <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
     </button>
+    <button class="tile-more" aria-label="Ещё" title="В плейлист, в очередь…" onclick={(e) => openMenu(e, [], f)}>⋯</button>
     {#if removable}
       <button class="tile-remove" aria-label="Убрать из библиотеки" title="Убрать из библиотеки" onclick={() => removeRoot(f.path)}>×</button>
     {/if}
@@ -567,17 +615,35 @@
             </form>
           {/if}
           {#if !openList}
-            {#each lists as l (l.id)}
-              <button class="row list-row" onclick={() => showList(l)}>
-                <span class="list-icon" class:fav={l.id === "favorites"}>
-                  {#if l.id === "favorites"}♥{:else}<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7" /><circle cx="18" cy="17" r="2.5" /><path d="M20.5 17V10" /></svg>{/if}
-                </span>
-                <span class="names"><span class="t">{l.name}</span><span class="a">{l.count} тр.</span></span>
-              </button>
-            {/each}
-            {#if !naming}
-              <button class="play-all" onclick={() => (naming = { id: null, name: "", paths: [] })}>+ Новый плейлист</button>
-            {/if}
+            <div class="grid">
+              {#each lists as l (l.id)}
+                <div class="tile">
+                  <button class="art list-art" class:fav={l.id === "favorites"} onclick={() => showList(l)} aria-label={l.name}>
+                    {#if l.id === "favorites"}
+                      <span class="big-heart">♥</span>
+                    {:else if listCovers[`${l.id}:${l.count}`]}
+                      <img src={listCovers[`${l.id}:${l.count}`]} alt="" draggable="false" />
+                    {:else}
+                      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7" /><circle cx="18" cy="17" r="2.5" /><path d="M20.5 17V10" /></svg>
+                    {/if}
+                  </button>
+                  {#if l.count}
+                    <button class="tile-play" aria-label="Играть плейлист" onclick={() => playList(l)}>
+                      <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
+                    </button>
+                  {/if}
+                  <span class="tile-name">{l.name}</span>
+                  <span class="tile-sub">{l.count} тр.</span>
+                </div>
+              {/each}
+              {#if !naming}
+                <button class="tile add" onclick={() => (naming = { id: null, name: "", paths: [] })}>
+                  <span class="art"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" /></svg></span>
+                  <span class="tile-name">Новый плейлист</span>
+                </button>
+              {/if}
+            </div>
+            <p class="hint">Совет: у любой папки есть ⋯ → «В плейлист» — добавит её целиком.</p>
           {:else}
             <div class="toolbar">
               {#if listTracks.length}
@@ -616,10 +682,11 @@
             </div>
           {/if}
           {#if view.tracks.length}
-            <button class="play-all" onclick={() => playFolder(view!.path)}>
-              <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
-              Играть всё
-            </button>
+            <div class="toolbar">
+              <button class="pill on" onclick={() => playFolder(view!.path)}>▶ Играть всё</button>
+              <button class="pill" onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name }, true)}>+ В плейлист</button>
+              <button class="pill" onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name })}>⋯</button>
+            </div>
             {#each view.tracks as t, i (t.path)}{@render trackRow(t, i, false)}{/each}
           {/if}
         {/if}
@@ -630,22 +697,35 @@
         <div class="menu-shade" onclick={() => (menu = null)}></div>
         <div class="menu" style:left="{menu.x}px" style:top="{menu.y}px">
           {#if !menu.lists}
-            <button onclick={() => queueAction("next", menu!.paths)}>Играть следующим</button>
-            <button onclick={() => queueAction("add", menu!.paths)}>Добавить в очередь</button>
+            {#if menu.folder}
+              <button
+                onclick={() => {
+                  playFolder(menu!.folder!.path);
+                  menu = null;
+                }}>Играть папку</button
+              >
+            {/if}
+            <button onclick={() => queueAction("next")}>Играть следующим</button>
+            <button onclick={() => queueAction("add")}>Добавить в очередь</button>
             <button onclick={() => (menu = { ...menu!, lists: true })}>В плейлист →</button>
           {:else}
+            {#if menu.folder}
+              <button class="new" onclick={() => newListFromFolder(menu!.folder!)}>+ Новый «{menu.folder.name}»</button>
+            {/if}
             {#each lists.filter((l) => l.id !== "favorites") as l (l.id)}
-              <button onclick={() => addToList(l, menu!.paths)}>{l.name}</button>
+              <button onclick={() => addToList(l)}>{l.name}</button>
             {/each}
-            <button
-              class="new"
-              onclick={() => {
-                naming = { id: null, name: "", paths: menu!.paths };
-                menu = null;
-                tab = "playlists";
-                openList = null;
-              }}>+ Новый плейлист…</button
-            >
+            {#if !menu.folder}
+              <button
+                class="new"
+                onclick={() => {
+                  naming = { id: null, name: "", paths: menu!.paths };
+                  menu = null;
+                  tab = "playlists";
+                  openList = null;
+                }}>+ Новый плейлист…</button
+              >
+            {/if}
           {/if}
         </div>
       {/if}
@@ -968,6 +1048,8 @@
     display: flex;
     flex-direction: column;
     border-top: 1px solid rgb(255 255 255 / 0.1);
+    /* Lists need more backing than the compact card: readable on bright, busy wallpapers. */
+    background: rgb(10 12 20 / 0.42);
   }
   .widget.up .panel {
     border-top: 0;
@@ -1160,6 +1242,41 @@
     width: 13px;
     height: 13px;
   }
+  .tile-more {
+    position: absolute;
+    right: 40px;
+    top: 6px;
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    line-height: 1;
+    background: rgb(0 0 0 / 0.55);
+    opacity: 0;
+  }
+  .tile:hover .tile-more {
+    opacity: 1;
+  }
+  .tile-sub {
+    margin-top: -4px;
+    font-size: 11px;
+    color: rgb(255 255 255 / 0.55);
+    text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
+  .list-art.fav {
+    background: linear-gradient(135deg, #ff6b8a, #7b5cff);
+  }
+  .big-heart {
+    font-size: 40px;
+    line-height: 1;
+    color: #fff;
+    text-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
+  }
+  .hint {
+    margin: 2px 2px 8px;
+    font-size: 11px;
+    color: rgb(255 255 255 / 0.5);
+    text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  }
   .tile-remove {
     position: absolute;
     top: 6px;
@@ -1175,22 +1292,6 @@
     opacity: 1;
   }
 
-  .play-all {
-    width: auto;
-    height: 28px;
-    margin: 0 0 6px;
-    padding: 0 12px 0 8px;
-    border-radius: 14px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    background: rgb(255 255 255 / 0.1);
-  }
-  .play-all svg {
-    width: 12px;
-    height: 12px;
-  }
 
   .row {
     position: relative;
@@ -1212,12 +1313,6 @@
   }
   .row.over {
     box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.8);
-  }
-  button.row {
-    gap: 8px;
-  }
-  button.row:active {
-    transform: none;
   }
   .row-main {
     flex: 1;
@@ -1311,27 +1406,6 @@
     color: #10121a;
   }
 
-  .list-row .list-icon {
-    flex: none;
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    display: grid;
-    place-items: center;
-    background: rgb(255 255 255 / 0.1);
-    font-size: 15px;
-  }
-  .list-icon.fav {
-    color: #ff6b8a;
-  }
-  .list-icon svg {
-    width: 15px;
-    height: 15px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-  }
 
   .naming {
     display: flex;

@@ -160,24 +160,53 @@ pub fn queue_for_opened(paths: &[PathBuf]) -> (Vec<PathBuf>, usize) {
     (queue, 0)
 }
 
+/// What an untagged file's name tells us: "10. ALBLAK 52 - YEEI" → (10, "ALBLAK 52", "YEEI").
+pub fn parse_file_name(stem: &str) -> (Option<u32>, String, String) {
+    let mut rest = stem.trim();
+    let mut number = None;
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if (1..=3).contains(&digits.len()) {
+        let after = &rest[digits.len()..];
+        let trimmed = after.trim_start_matches(['.', '-', '_', ')', ' ']);
+        // Only a number followed by a separator is a track number ("10. X", "03 - X"), not "21 Savage".
+        if trimmed.len() < after.len() && after.starts_with(['.', '-', '_', ')'])
+            || after.starts_with(" - ")
+            || after.starts_with(". ")
+        {
+            number = digits.parse().ok();
+            rest = trimmed.trim();
+        }
+    }
+    match rest.split_once(" - ") {
+        Some((artist, title)) if !artist.trim().is_empty() && !title.trim().is_empty() => {
+            (number, artist.trim().to_string(), title.trim().to_string())
+        }
+        _ => (number, String::new(), rest.to_string()),
+    }
+}
+
 pub fn read_track(path: &Path) -> TrackInfo {
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let (number, artist, title) = parse_file_name(&stem);
     let mut info = TrackInfo {
         path: path.to_string_lossy().into_owned(),
-        title: path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default(),
+        title,
+        artist,
+        number,
         ..Default::default()
     };
     if let Ok(file) = lofty::read_from_path(path) {
         info.duration = file.properties().duration().as_secs_f64();
         if let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) {
+            // Tags win; the file name only fills what the tags leave empty.
             if let Some(t) = tag.title().filter(|t| !t.trim().is_empty()) {
                 info.title = t.into_owned();
             }
-            info.artist = tag.artist().map(|a| a.into_owned()).unwrap_or_default();
+            if let Some(a) = tag.artist().filter(|a| !a.trim().is_empty()) {
+                info.artist = a.into_owned();
+            }
             info.album = tag.album().map(|a| a.into_owned()).unwrap_or_default();
-            info.number = tag.track();
+            info.number = tag.track().or(info.number);
         }
     }
     info
@@ -185,8 +214,13 @@ pub fn read_track(path: &Path) -> TrackInfo {
 
 // ---- tag cache: tags are read once per file version, not on every folder open or search ----
 
+/// Bump when `read_track` changes what it extracts, so old cached tags are read again.
+const CACHE_VERSION: u32 = 2;
+
 #[derive(Default, Serialize, Deserialize)]
 struct Cache {
+    #[serde(default)]
+    version: u32,
     /// path → (modified secs, size, tags)
     entries: HashMap<String, (u64, u64, TrackInfo)>,
     #[serde(skip)]
@@ -224,6 +258,7 @@ pub fn track_info(app: &AppHandle, path: &Path) -> TrackInfo {
         if let Some(saved) = cache_file(app)
             .and_then(|f| std::fs::read_to_string(f).ok())
             .and_then(|t| serde_json::from_str::<Cache>(&t).ok())
+            .filter(|c| c.version == CACHE_VERSION)
         {
             cache.entries = saved.entries;
         }
@@ -252,6 +287,7 @@ pub fn flush_cache(app: &AppHandle) {
         return;
     };
     cache.dirty = false;
+    cache.version = CACHE_VERSION;
     if let (Some(f), Ok(text)) = (cache_file(app), serde_json::to_string(&*cache)) {
         if let Some(dir) = f.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -420,6 +456,15 @@ pub async fn library_open(app: AppHandle, path: String) -> Result<FolderView, St
     })
 }
 
+/// Every track of a folder and its subfolders, in play order (to add a whole folder at once).
+#[tauri::command]
+pub async fn folder_tracks(app: AppHandle, path: String) -> Result<Vec<String>, String> {
+    let dir = check(&app, &path)?;
+    let mut files = Vec::new();
+    collect(&dir, 0, &mut files);
+    Ok(files.into_iter().map(|f| f.to_string_lossy().into_owned()).collect())
+}
+
 #[tauri::command]
 pub async fn library_cover(app: AppHandle, path: String) -> Result<Option<String>, String> {
     Ok(cover_of(&check(&app, &path)?))
@@ -477,6 +522,18 @@ mod tests {
         assert!(is_audio(Path::new("a/b.flac")));
         assert!(!is_audio(Path::new("a/cover.jpg")));
         assert!(!is_audio(Path::new("a/project.flp")));
+    }
+
+    #[test]
+    fn file_names_give_number_artist_title() {
+        let p = |s: &str| parse_file_name(s);
+        assert_eq!(p("10. ALBLAK 52 - YEEI"), (Some(10), "ALBLAK 52".into(), "YEEI".into()));
+        assert_eq!(p("03 - Artist - Song"), (Some(3), "Artist".into(), "Song".into()));
+        assert_eq!(p("01. Туманность Киля"), (Some(1), String::new(), "Туманность Киля".into()));
+        // A name that starts with digits is not a track number.
+        assert_eq!(p("21 Savage - No Heart"), (None, "21 Savage".into(), "No Heart".into()));
+        assert_eq!(p("Intro"), (None, String::new(), "Intro".into()));
+        assert_eq!(p("2049"), (None, String::new(), "2049".into()));
     }
 
     #[test]
