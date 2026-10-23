@@ -214,10 +214,13 @@
   function openMenu(e: MouseEvent, paths: string[]) {
     const panel = (e.currentTarget as HTMLElement).closest(".panel")!.getBoundingClientRect();
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Right under the button; above it when there is no room below.
+    const height = 104;
+    const below = box.bottom - panel.top + 2;
     menu = {
       paths,
       x: Math.max(8, Math.min(box.right - panel.left - 184, panel.width - 196)),
-      y: Math.min(box.bottom - panel.top + 2, panel.height - 196),
+      y: below + height <= panel.height - 8 ? below : Math.max(8, box.top - panel.top - height - 2),
       lists: false,
     };
     if (!lists.length) loadLists();
@@ -1028,6 +1031,7 @@
   .scroll {
     flex: 1;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: 4px 10px 12px 16px;
     scrollbar-width: thin;

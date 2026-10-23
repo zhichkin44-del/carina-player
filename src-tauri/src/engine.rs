@@ -2,6 +2,7 @@
 //! Follows the system's default output device (headphones plugged in or out), and remembers the
 //! queue and position so the next start continues where the user stopped.
 
+use std::cell::Cell;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -214,6 +215,7 @@ pub fn spawn(app: AppHandle) {
             track: None,
             cover: None,
             loaded: false,
+            stale_position: Cell::new(None),
         };
         engine.restore();
         engine.run(rx);
@@ -236,6 +238,9 @@ struct Engine {
     cover: Option<String>,
     /// A source is in the player (false after the queue ran out).
     loaded: bool,
+    /// rodio keeps reporting the previous track's position until the new one has been polled;
+    /// while `get_pos` still returns this value, the new track is at 0.
+    stale_position: Cell<Option<Duration>>,
 }
 
 impl Engine {
@@ -418,10 +423,16 @@ impl Engine {
     }
 
     fn position(&self) -> f64 {
-        if self.loaded {
-            self.player.get_pos().as_secs_f64()
-        } else {
-            0.0
+        if !self.loaded {
+            return 0.0;
+        }
+        let pos = self.player.get_pos();
+        match self.stale_position.get() {
+            Some(stale) if pos == stale => 0.0,
+            _ => {
+                self.stale_position.set(None);
+                pos.as_secs_f64()
+            }
         }
     }
 
@@ -464,6 +475,7 @@ impl Engine {
     fn load(&mut self, index: usize, play: bool) {
         self.player.clear();
         self.loaded = false;
+        self.stale_position.set(Some(self.player.get_pos()).filter(|p| !p.is_zero()));
         for i in index..self.queue.len() {
             let path = self.queue[i].clone();
             if let Some(source) = open(&path) {
