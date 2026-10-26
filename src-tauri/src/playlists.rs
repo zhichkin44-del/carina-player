@@ -101,7 +101,7 @@ pub async fn playlists(app: AppHandle) -> Vec<PlaylistSummary> {
     let store = load(&app);
     std::iter::once(PlaylistSummary {
         id: FAVORITES.into(),
-        name: "Избранное".into(),
+        name: "Favorites".into(),
         count: store.favorites.len(),
     })
     .chain(store.playlists.iter().map(|p| PlaylistSummary {
@@ -131,8 +131,9 @@ pub async fn playlist_tracks(app: AppHandle, id: String) -> Vec<TrackInfo> {
 pub async fn playlist_create(app: AppHandle, name: String, paths: Vec<String>) -> PlaylistSummary {
     edit(&app, |store| {
         let id = new_id(store);
+        // The widget always sends a name in its language; this English fallback is only for empty input.
         let name = if name.trim().is_empty() {
-            format!("Плейлист {}", store.playlists.len() + 1)
+            format!("Playlist {}", store.playlists.len() + 1)
         } else {
             name.trim().to_string()
         };

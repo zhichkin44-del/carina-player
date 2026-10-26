@@ -12,19 +12,22 @@ mod position;
 mod smtc;
 mod tray;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use tauri::Manager;
 
 /// Widget size in logical pixels (must match `tauri.conf.json`).
 const WIDGET_SIZE: (f64, f64) = (400.0, 132.0);
 const WIDGET_MARGIN: f64 = 24.0;
-/// Height of the window with the library panel open, logical pixels.
-const PANEL_HEIGHT: f64 = 580.0;
+/// Height of the window with the library panel open, logical pixels: room for three rows of folders
+/// plus the "+" card, so the last row is never cut off. Less than this only when the screen is shorter.
+const PANEL_HEIGHT: f64 = 800.0;
 
 static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
 /// The panel grew upwards (the widget sits in the lower half of the screen).
 static PANEL_UP: AtomicBool = AtomicBool::new(false);
+/// Height the panel was opened with, physical pixels; closing restores the widget from it.
+static PANEL_TALL: AtomicI32 = AtomicI32::new(0);
 
 /// Open or close the library panel: the window grows towards the middle of the screen.
 /// Returns "up" or "down" so the page puts the panel on the right side of the widget card.
@@ -34,22 +37,32 @@ fn set_panel(window: tauri::WebviewWindow, open: bool) -> tauri::Result<&'static
     let pos = window.outer_position()?;
     let width = window.outer_size()?.width;
     let compact = (WIDGET_SIZE.1 * scale).round() as i32;
-    let tall = (PANEL_HEIGHT * scale).round() as i32;
     let dir = |up: bool| if up { "up" } else { "down" };
 
     if open {
         if PANEL_OPEN.swap(true, Ordering::Relaxed) {
             return Ok(dir(PANEL_UP.load(Ordering::Relaxed)));
         }
-        let up = match window.current_monitor()? {
+        let wanted = (PANEL_HEIGHT * scale).round() as i32;
+        let margin = (WIDGET_MARGIN * scale).round() as i32;
+        let (up, tall) = match window.current_monitor()? {
             Some(m) => {
                 let area = m.work_area();
                 let middle = area.position.y + area.size.height as i32 / 2;
-                pos.y + compact / 2 > middle
+                let up = pos.y + compact / 2 > middle;
+                // Never taller than the room on the widget's side of the screen (the taskbar is excluded),
+                // and never shorter than the widget itself, even when the widget sits at the very edge.
+                let room = if up {
+                    pos.y + compact - area.position.y
+                } else {
+                    area.position.y + area.size.height as i32 - pos.y
+                };
+                (up, wanted.min(room - margin).max(compact))
             }
-            None => false,
+            None => (false, wanted),
         };
         PANEL_UP.store(up, Ordering::Relaxed);
+        PANEL_TALL.store(tall, Ordering::Relaxed);
         position::suspend(true);
         if up {
             window.set_position(tauri::PhysicalPosition::new(
@@ -68,6 +81,7 @@ fn set_panel(window: tauri::WebviewWindow, open: bool) -> tauri::Result<&'static
             return Ok("none");
         }
         let up = PANEL_UP.load(Ordering::Relaxed);
+        let tall = PANEL_TALL.load(Ordering::Relaxed);
         window.set_size(tauri::PhysicalSize::new(width, compact as u32))?;
         if up {
             window.set_position(tauri::PhysicalPosition::new(
@@ -185,6 +199,7 @@ pub fn run() {
             playlists::playlist_move,
             playlists::favorite_toggle,
             playlists::favorites,
+            tray::set_tray_language,
             set_panel
         ])
         .run(tauri::generate_context!())

@@ -24,18 +24,41 @@
     { path: "/m/Ken Carson", name: "12_Ken_Carson" },
     { path: "/m/Memphis", name: "01_Memphis_Dark_Atlanta" },
   ];
+  const allRoots = [
+    { path: "/m", name: "Aggressive_Trap_17_Legends" },
+    { path: "/m/02_Dark_Jazz_Noir_Vocals_Remastered_Deluxe_Edition_2024_Mix", name: "02_Dark_Jazz_Noir_Vocals_Remastered_Deluxe_Edition_2024_Mix" },
+    { path: "/m/Memphis", name: "01_Memphis_Dark_Atlanta" },
+    { path: "/m/Ken Carson", name: "12_Ken_Carson" },
+    { path: "/m/ALBLAK 52", name: "03_ALBLAK_52" },
+    { path: "/m/Horror", name: "Horror" },
+    { path: "/m/Lofi", name: "Lofi_Study" },
+    { path: "/m/Chill", name: "Chill_Beats" },
+    { path: "/m/Drill", name: "Drill_Mix" },
+    { path: "/m/Phonk", name: "Phonk_Night" },
+    { path: "/m/Synth", name: "Synthwave_Road" },
+    { path: "/m/Rain", name: "Rain_Sounds" },
+  ];
+  // Seven folders by default (the owner's case: three rows with the "+" card); screenshots can ask for more.
+  let rootCount = 7;
+  const roots = () => allRoots.slice(0, rootCount);
+  const queue = {
+    items: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ path: `/q/${n}.mp3`, title: `Night Drive Part ${n}` })),
+    index: 2,
+    shuffle: false,
+    repeat: "all",
+  };
   const data: Record<string, (a: any) => any> = {
     set_panel: () => "down",
-    library_roots: () => [{ path: "/m", name: "Aggressive_Trap_17_Legends" }],
+    library_roots: () => roots(),
     library_open: ({ path }) => ({
       path,
       name: path === "/m" ? "Aggressive_Trap_17_Legends" : path.split("/").pop(),
       folders: path === "/m" ? albums : [],
-      tracks: path === "/m" ? [] : [1, 2, 3, 4, 5].map((n) => track(n, `Трек ${n}`, "ALBLAK 52", path)),
+      tracks: path === "/m" ? [] : [1, 2, 3, 4, 5].map((n) => track(n, `Track ${n}`, "ALBLAK 52", path)),
     }),
     library_cover: ({ path }) => (path.includes("Ken") ? cover("#e07a3a", "#3a1a10") : path.includes("Memphis") ? cover("#2d6cdf", "#0b1633") : null),
     playlists: () => [
-      { id: "favorites", name: "Избранное", count: 7 },
+      { id: "favorites", name: "Favorites", count: 7 },
       { id: "p1", name: "Night mix", count: 12 },
       { id: "p2", name: "Gym", count: 0 },
     ],
@@ -48,8 +71,12 @@
   onMount(async () => {
     if (!dev) return;
     const { mockIPC, mockWindows } = await import("@tauri-apps/api/mocks");
+    const { emit } = await import("@tauri-apps/api/event");
     mockWindows("widget");
-    mockIPC((cmd, args) => (cmd in data ? data[cmd](args) : null));
+    mockIPC((cmd, args) => (cmd in data ? data[cmd](args) : null), { shouldMockEvents: true });
+    // Screenshots and checks ask for the queue through the page: the widget receives it as a "queue" event.
+    (window as any).__emitQueue = () => emit("queue", queue);
+    (window as any).__setRootCount = (n: number) => (rootCount = n);
     document.documentElement.style.background = "url(/@fs/C:/carina/design/preview-bg.webp) -500px -330px / 1920px auto";
     Widget = (await import("../+page.svelte")).default;
   });

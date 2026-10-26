@@ -383,12 +383,13 @@ pub fn inside_library(app: &AppHandle, path: &Path) -> bool {
     load(app).folders.iter().any(|root| path.starts_with(root))
 }
 
+// The widget translates these errors by their exact text (`backendErrors` in src/routes/+page.svelte): change both together.
 fn check(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(path);
     if inside_library(app, &path) {
         Ok(path)
     } else {
-        Err("Папка не в библиотеке".into())
+        Err("Folder is not in the library".into())
     }
 }
 
@@ -406,14 +407,15 @@ pub async fn library_roots(app: AppHandle) -> Vec<FolderEntry> {
         .collect()
 }
 
+/// Errors are English texts the widget translates by exact match (`backendErrors`, src/routes/+page.svelte).
 #[tauri::command]
 pub async fn library_add(app: AppHandle, path: String) -> Result<FolderEntry, String> {
     let dir = PathBuf::from(&path);
     if !dir.is_dir() {
-        return Err("Это не папка".into());
+        return Err("Not a folder".into());
     }
     if !has_audio(&dir, 0) {
-        return Err("В папке нет музыки".into());
+        return Err("No music in this folder".into());
     }
     let mut config = load(&app);
     if !config.folders.iter().any(|f| Path::new(f) == dir) {
