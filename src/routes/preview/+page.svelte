@@ -2,6 +2,7 @@
   // Dev-only stand: the widget with fake data on a real wallpaper, to check the UI in a browser
   // without touching the desktop. Production builds render nothing here.
   import { onMount } from "svelte";
+  import previewBg from "../../../design/preview-bg.webp";
 
   const dev = import.meta.env.DEV;
   let Widget = $state<any>(null);
@@ -25,7 +26,7 @@
     { path: "/m/Memphis", name: "01_Memphis_Dark_Atlanta" },
   ];
   const allRoots = [
-    { path: "/m", name: "Aggressive_Trap_17_Legends" },
+    { path: "/m", name: "Demo_Library" },
     { path: "/m/02_Dark_Jazz_Noir_Vocals_Remastered_Deluxe_Edition_2024_Mix", name: "02_Dark_Jazz_Noir_Vocals_Remastered_Deluxe_Edition_2024_Mix" },
     { path: "/m/Memphis", name: "01_Memphis_Dark_Atlanta" },
     { path: "/m/Ken Carson", name: "12_Ken_Carson" },
@@ -52,7 +53,7 @@
     library_roots: () => roots(),
     library_open: ({ path }) => ({
       path,
-      name: path === "/m" ? "Aggressive_Trap_17_Legends" : path.split("/").pop(),
+      name: path === "/m" ? "Demo_Library" : path.split("/").pop(),
       folders: path === "/m" ? albums : [],
       tracks: path === "/m" ? [] : [1, 2, 3, 4, 5].map((n) => track(n, `Track ${n}`, "ALBLAK 52", path)),
     }),
@@ -77,7 +78,7 @@
     // Screenshots and checks ask for the queue through the page: the widget receives it as a "queue" event.
     (window as any).__emitQueue = () => emit("queue", queue);
     (window as any).__setRootCount = (n: number) => (rootCount = n);
-    document.documentElement.style.background = "url(/@fs/C:/carina/design/preview-bg.webp) -500px -330px / 1920px auto";
+    document.documentElement.style.background = `url(${previewBg}) -500px -330px / 1920px auto`;
     Widget = (await import("../+page.svelte")).default;
   });
 </script>
