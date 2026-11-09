@@ -14,9 +14,13 @@
 </p>
 
 <p align="center">
-  <img src="design/playlists-preview.png" width="360" alt="Плейлисты в панели Carina">
+  <img src="design/queue.png" width="300" alt="Carina на рабочем столе: плеер и очередь">
   &nbsp;
-  <img src="design/signature-preview.png" width="360" alt="Настройки виджета">
+  <img src="design/library.png" width="300" alt="Библиотека Carina: папки и поиск">
+</p>
+
+<p align="center">
+  <img src="design/widget.png" width="460" alt="Компактный виджет Carina">
 </p>
 
 ## Установка
