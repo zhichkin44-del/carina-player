@@ -35,6 +35,11 @@ The installer is not code-signed, so Windows SmartScreen may warn about an unkno
 - Mouse wheel over the widget changes volume; clicking the progress line seeks.
 - **English and Russian interface:** English by default, switch EN / RU in the widget settings.
 
+## Requirements
+
+- Windows. The prebuilt installer needs no administrator rights.
+- To build from source: Node.js 22.18 or newer, Rust (stable), and Visual Studio Build Tools with the "Desktop development with C++" workload. The full list is under Build from source.
+
 ## Build from source (Windows)
 
 You need:
@@ -69,6 +74,12 @@ cargo run --release --example sessions                # Windows media session di
 
 The Rust build cache (`src-tauri/target`, up to 15 GB) can be deleted at any time with `cargo clean` inside `src-tauri`.
 
+## Usage
+
+- Hover over the widget: ☰ opens the library, ⚙ opens settings.
+- Mouse wheel over the widget changes volume; clicking the progress line seeks.
+- "Open with → Carina" plays the whole folder starting from the chosen track.
+
 ## Tests
 
 ```bash
@@ -95,4 +106,6 @@ docs/                library concept
 
 Version **0.1.1**, Windows. Next: code signing, Microsoft Store, then macOS.
 
-License: [MIT](LICENSE). Third-party components and their licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## License
+
+[MIT](LICENSE). Third-party components and their licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
