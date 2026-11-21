@@ -1,7 +1,7 @@
 {
   "name": "carina",
   "version": "0.1.1",
-  "description": "",
+  "description": "Lightweight Windows audio player with a glass desktop widget",
   "type": "module",
   "engines": {
     "node": ">=22.18"

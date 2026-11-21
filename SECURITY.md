@@ -9,7 +9,7 @@
 Сообщайте об уязвимостях только приватно — через GitHub Security Advisories:
 
 - вкладка **Security → Report a vulnerability** этого репозитория;
-- прямая ссылка: https://github.com/zhichkin44-del/Carina/security/advisories/new
+- прямая ссылка: https://github.com/zhichkin44-del/carina-player/security/advisories/new
 
 Не публикуйте уязвимости в открытых issues, pull requests и обсуждениях.
 

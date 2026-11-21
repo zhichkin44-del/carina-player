@@ -10,20 +10,22 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zhichkin44-del/Carina/releases/latest"><b>⬇ Скачать установщик</b></a> ·
-  <a href="PROJECT.md">Состояние и roadmap</a> ·
-  <a href="docs/PLAN.md">Журнал разработки</a>
+  <a href="https://github.com/zhichkin44-del/carina-player/releases/latest"><b>⬇ Скачать установщик</b></a>
 </p>
 
 <p align="center">
-  <img src="design/playlists-preview.jpg" width="360" alt="Плейлисты в панели Carina">
+  <img src="design/queue.png" width="300" alt="Carina на рабочем столе: плеер и очередь">
   &nbsp;
-  <img src="design/signature-preview.jpg" width="360" alt="Настройки виджета">
+  <img src="design/library.png" width="300" alt="Библиотека Carina: папки и поиск">
+</p>
+
+<p align="center">
+  <img src="design/widget.png" width="460" alt="Компактный виджет Carina">
 </p>
 
 ## Установка
 
-1. Откройте [Releases](https://github.com/zhichkin44-del/Carina/releases/latest) и скачайте `Carina_<версия>_x64-setup.exe` (≈ 2 МБ).
+1. Откройте [Releases](https://github.com/zhichkin44-del/carina-player/releases/latest) и скачайте `Carina_<версия>_x64-setup.exe` (≈ 2 МБ).
 2. Запустите. Права администратора не нужны: Carina ставится для текущего пользователя.
 3. Виджет появится в правом нижнем углу. ☰ при наведении открывает библиотеку, ⚙ открывает настройки.
 
@@ -39,10 +41,11 @@
 - **Продолжает с того же места** после перезапуска.
 - **Показывает другие плееры** (Spotify, YouTube в браузере), когда своя очередь пуста.
 - Колесо мыши над виджетом меняет громкость, клик по линии прогресса перематывает.
+- **Интерфейс на английском и русском:** по умолчанию английский, переключатель EN / RU в настройках виджета. На снимках выше — русский.
 
 ## Сборка из исходников
 
-Нужны [Node.js](https://nodejs.org) 22+, [Rust](https://rustup.rs) (stable) и WebView2 (есть в Windows 11).
+Нужны [Node.js](https://nodejs.org) 22.18 или новее, [Rust](https://rustup.rs) (stable) и WebView2 (есть в Windows 11).
 
 ```bash
 npm install
@@ -62,6 +65,14 @@ cargo run --release --example sessions                # диагностика �
 
 Кэш сборки Rust (`src-tauri/target`, до 15 ГБ) можно удалять в любой момент: `cargo clean` в `src-tauri`.
 
+## Проверки
+
+```bash
+npm run check                     # svelte-check: типы и разметка интерфейса
+npm test                          # тесты настроек интерфейса
+cd src-tauri && cargo test        # 22 теста ядра: движок, библиотека, плейлисты, медиасессии, раскладка окна
+```
+
 ## Стек
 
 Tauri 2 · Rust (rodio, symphonia, lofty, Windows SMTC) · SvelteKit · TypeScript · NSIS
@@ -73,12 +84,11 @@ src/                 интерфейс (SvelteKit): виджет, панель,
 src-tauri/src/       ядро на Rust: движок, библиотека, плейлисты, SMTC, трей, окно на рабочем столе
 src-tauri/examples/  проверки без интерфейса (движок, медиасессии)
 design/              иконка и превью
-docs/                концепция библиотеки и журнал разработки
+docs/                концепция библиотеки
 ```
 
 ## Статус
 
-Версия **0.1.1**, Windows. Дальше: Free/Pro и подпись программы, Microsoft Store, затем macOS.
-Подробно в [PROJECT.md](PROJECT.md).
+Версия **0.1.1**, Windows. Дальше: подпись программы, Microsoft Store, затем macOS.
 
-Лицензия: [MIT](LICENSE).
+Лицензия: [MIT](LICENSE). Сторонние компоненты и их лицензии — [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
