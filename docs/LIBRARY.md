@@ -1,28 +1,28 @@
-# Проводник музыки Carina — концепция (22.10.2026)
+# Carina music browser: concept (2026-10-22)
 
-**Принцип:** Carina — это виджет. Большого окна нет: всё раскрывается из виджета и сворачивается обратно.
+**Principle:** Carina is a widget. There is no large window: everything opens from the widget and collapses back.
 
-## Виджет
-- Правый верхний угол при наведении — ⚙ настройки (прозрачность фона, язык).
-- Правый нижний угол при наведении — ☰ **библиотека**. Клик: виджет вырастает в панель (≈ 400×560)
-  в сторону центра экрана (вверх, если виджет внизу; вниз, если вверху). Повторный клик или Esc — свернуть.
-- Колесо мыши над виджетом — громкость. Клик по линии прогресса — перемотка.
+## Widget
+- Top-right corner, on hover: ⚙ settings (background transparency, language).
+- Bottom-right corner, on hover: ☰ **library**. A click grows the widget into a panel (about 400×560)
+  toward the center of the screen (up if the widget is at the bottom; down if it is at the top). Another click or Esc collapses it.
+- Mouse wheel over the widget changes volume. Clicking the progress line seeks.
 
-## Библиотека = папки, а не вся система
-- Пользователь добавляет **свои музыкальные папки** («+» в панели или перетаскивание папки на виджет).
-  Больше нигде не ходим: никаких дисков, «Документов» и системных путей.
-- **Папка = плейлист.** Подпапки = альбомы/сборники внутри. Порядок — по номеру трека, иначе по имени файла.
-- Показываем только аудио: mp3, flac, wav, m4a/aac, ogg, aiff (opus — позже). Папки без музыки скрыты.
-- Обложка папки: `cover.jpg` / `folder.jpg` / `front.jpg`, иначе обложка из тегов первого трека.
-- В папке: сверху плитки подпапок, ниже список треков (№, название, исполнитель, длительность).
-  Клик по треку — играет **эта папка с этого трека**. «▶» у папки — вся папка с подпапками подряд.
-- Поиск — по текущей папке и её подпапкам (название, исполнитель, имя файла).
-- Вкладка «Очередь» — что играет дальше, клик — перейти.
+## Library = your folders, not the whole system
+- The user adds **their own music folders** (the "+" in the panel, or dragging a folder onto the widget).
+  Nothing else is scanned: no drives, no Documents folder, no system paths.
+- **Folder = playlist.** Subfolders = albums or compilations inside it. Order: by track number, otherwise by file name.
+- Only audio is shown: mp3, flac, wav, m4a/aac, ogg, aiff (opus later). Folders without music are hidden.
+- Folder cover: `cover.jpg` / `folder.jpg` / `front.jpg`, otherwise the cover from the first track's tags.
+- Inside a folder: subfolder tiles at the top, the track list below (number, title, artist, duration).
+  Clicking a track plays **this folder starting from that track**. The "▶" on a folder plays the whole folder with its subfolders in order.
+- Search covers the current folder and its subfolders (title, artist, file name).
+- "Queue" tab: what plays next; click to jump.
 
-## Движок
-- Свой: rodio (cpal + symphonia), теги и обложки — lofty. Очередь = папка; «вперёд/назад» работают всегда.
-- Когда Carina играет своё, виджет показывает её. Когда своя очередь пуста — показывает другие плееры Windows.
-- Медиаклавиши и системное окно громкости — через свою медиасессию Windows (SMTC).
+## Engine
+- Own engine: rodio (cpal + symphonia); tags and covers via lofty. The queue is the folder; previous/next always work.
+- When Carina plays its own audio, the widget shows it. When its own queue is empty, the widget shows other Windows players.
+- Media keys and the system volume flyout go through Carina's own Windows media session (SMTC).
 
-## Позже
-Индекс для глобального поиска, точный gapless, тексты песен, эквалайзер.
+## Later
+Index for global search, exact gapless playback, lyrics, equalizer.

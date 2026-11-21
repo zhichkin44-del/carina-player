@@ -1,17 +1,17 @@
-# Политика безопасности
+# Security Policy
 
-## Поддерживаемые версии
+## Supported versions
 
-Поддерживается только последняя версия из ветки 0.1.x. Исправления выходят в новых релизах.
+Only the latest version from the 0.1.x line is supported. Fixes are released as new versions.
 
-## Как сообщить об уязвимости
+## Reporting a vulnerability
 
-Сообщайте об уязвимостях только приватно — через GitHub Security Advisories:
+Report vulnerabilities privately only, through GitHub Security Advisories:
 
-- вкладка **Security → Report a vulnerability** этого репозитория;
-- прямая ссылка: https://github.com/zhichkin44-del/carina-player/security/advisories/new
+- the **Security → Report a vulnerability** tab of this repository;
+- direct link: https://github.com/zhichkin44-del/carina-player/security/advisories/new
 
-Не публикуйте уязвимости в открытых issues, pull requests и обсуждениях.
+Do not disclose vulnerabilities in public issues, pull requests or discussions.
 
-В отчёте опишите версию, шаги воспроизведения и возможные последствия.
-Стараемся ответить в течение 7 дней.
+Include the version, steps to reproduce, and the possible impact.
+We aim to reply within 7 days.

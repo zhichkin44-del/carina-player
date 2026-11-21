@@ -5,90 +5,94 @@
 <h1 align="center">Carina</h1>
 
 <p align="center">
-  Лёгкий аудиоплеер для Windows: стеклянный виджет на рабочем столе и проводник музыки, который раскрывается прямо из него.
+  A lightweight audio player for Windows: a glass desktop widget and a music browser that opens right from it.
   <br><sub>by zhichkin44-del</sub>
 </p>
 
 <p align="center">
-  <a href="https://github.com/zhichkin44-del/carina-player/releases/latest"><b>⬇ Скачать установщик</b></a>
+  <a href="https://github.com/zhichkin44-del/carina-player/releases/latest"><b>Download the installer</b></a>
 </p>
 
-<p align="center">
-  <img src="design/queue.png" width="300" alt="Carina на рабочем столе: плеер и очередь">
-  &nbsp;
-  <img src="design/library.png" width="300" alt="Библиотека Carina: папки и поиск">
-</p>
+## Install (Windows, prebuilt)
 
-<p align="center">
-  <img src="design/widget.png" width="460" alt="Компактный виджет Carina">
-</p>
+1. Open [Releases](https://github.com/zhichkin44-del/carina-player/releases/latest) and download `Carina_<version>_x64-setup.exe` (about 2 MB).
+2. Run it. No administrator rights are needed: Carina installs for the current user.
+3. The widget appears in the lower-right corner. Hover over it: ☰ opens the library, ⚙ opens settings.
 
-## Установка
+The installer registers Carina for audio files: "Open with → Carina" plays the whole folder starting from the chosen track.
 
-1. Откройте [Releases](https://github.com/zhichkin44-del/carina-player/releases/latest) и скачайте `Carina_<версия>_x64-setup.exe` (≈ 2 МБ).
-2. Запустите. Права администратора не нужны: Carina ставится для текущего пользователя.
-3. Виджет появится в правом нижнем углу. ☰ при наведении открывает библиотеку, ⚙ открывает настройки.
+The installer is not code-signed, so Windows SmartScreen may warn about an unknown publisher. Choose "More info → Run anyway" only if you trust the download.
 
-Установщик регистрирует Carina для аудиофайлов: «Открыть с помощью → Carina» играет всю папку начиная с выбранного трека.
+## Features
 
-## Возможности
+- **Desktop widget.** Glass background with adjustable transparency, survives Win+D, does not steal focus, remembers its position.
+- **Own audio engine** (rodio + symphonia): mp3, flac (up to 96 kHz / 24 bit), m4a/aac, ogg, wav, aiff.
+- **Library from your own folders.** A folder is a playlist, subfolders are albums, covers come from `cover.jpg` or tags, with search.
+- **Playlists and Favorites (♥)** as tiles, a queue with drag reorder, "play next", shuffle and repeat.
+- **Media keys and the Windows volume flyout**, tray icon, start with Windows.
+- **Resumes** where you stopped after a restart.
+- **Shows other players** (Spotify, YouTube in a browser) when Carina's own queue is empty.
+- Mouse wheel over the widget changes volume; clicking the progress line seeks.
+- **English and Russian interface:** English by default, switch EN / RU in the widget settings.
 
-- **Виджет на рабочем столе.** Стекло с настраиваемой прозрачностью, переживает Win+D, не отбирает фокус, помнит своё место.
-- **Свой движок** (rodio + symphonia): mp3, flac (до 96 кГц / 24 бит), m4a/aac, ogg, wav, aiff.
-- **Библиотека из ваших папок.** Папка = плейлист, подпапки = альбомы, обложки из `cover.jpg` или тегов, поиск.
-- **Плейлисты и ♥ Избранное** плитками, очередь с перетаскиванием, «играть следующим», перемешивание, повтор.
-- **Медиаклавиши и системное окно громкости Windows**, трей, автозапуск.
-- **Продолжает с того же места** после перезапуска.
-- **Показывает другие плееры** (Spotify, YouTube в браузере), когда своя очередь пуста.
-- Колесо мыши над виджетом меняет громкость, клик по линии прогресса перематывает.
-- **Интерфейс на английском и русском:** по умолчанию английский, переключатель EN / RU в настройках виджета. На снимках выше — русский.
+## Build from source (Windows)
 
-## Сборка из исходников
+You need:
 
-Нужны [Node.js](https://nodejs.org) 22.18 или новее, [Rust](https://rustup.rs) (stable) и WebView2 (есть в Windows 11).
+- [Git for Windows](https://git-scm.com/download/win)
+- [Node.js](https://nodejs.org) 22.18 or newer (LTS)
+- [Rust](https://rustup.rs) (stable): download `rustup-init.exe` and accept the defaults
+- Visual Studio Build Tools with the "Desktop development with C++" workload (required by Rust on Windows)
+- WebView2 runtime (already included in Windows 11)
 
-```bash
+Steps, in PowerShell:
+
+```powershell
+git clone https://github.com/zhichkin44-del/carina-player.git
+cd carina-player
 npm install
-npx tauri build        # установщик → src-tauri/target/release/bundle/nsis/
+npx tauri build
 ```
 
-> Собирать только через `npx tauri build`: голый `cargo build` даёт exe, который ищет dev-сервер (белый экран).
+The installer is written to `src-tauri\target\release\bundle\nsis\`. Install it, or run `npx tauri dev` to start the app from source with hot reload.
 
-## Разработка
+> Build only with `npx tauri build` (or `tauri dev`). A plain `cargo build` produces an exe that looks for a dev server and shows a blank window.
+
+## Development
 
 ```bash
-npx tauri dev                                         # приложение с горячей перезагрузкой
-npm run dev                                           # стенд интерфейса в браузере: /preview
-cargo run --release --example check -- <папка>        # проверка движка на файлах без звука
-cargo run --release --example sessions                # диагностика медиасессий Windows
+npx tauri dev                                         # the app with hot reload
+npm run dev                                           # UI test stand in a browser: /preview
+cargo run --release --example check -- <folder>       # engine check on real files (no sound needed)
+cargo run --release --example sessions                # Windows media session diagnostics
 ```
 
-Кэш сборки Rust (`src-tauri/target`, до 15 ГБ) можно удалять в любой момент: `cargo clean` в `src-tauri`.
+The Rust build cache (`src-tauri/target`, up to 15 GB) can be deleted at any time with `cargo clean` inside `src-tauri`.
 
-## Проверки
+## Tests
 
 ```bash
-npm run check                     # svelte-check: типы и разметка интерфейса
-npm test                          # тесты настроек интерфейса
-cd src-tauri && cargo test        # 22 теста ядра: движок, библиотека, плейлисты, медиасессии, раскладка окна
+npm run check                     # svelte-check: types and UI markup
+npm test                          # UI settings tests
+cd src-tauri && cargo test        # core tests: engine, library, playlists, media sessions, window layout
 ```
 
-## Стек
+## Tech stack
 
 Tauri 2 · Rust (rodio, symphonia, lofty, Windows SMTC) · SvelteKit · TypeScript · NSIS
 
-## Структура
+## Project structure
 
 ```
-src/                 интерфейс (SvelteKit): виджет, панель, стенд /preview
-src-tauri/src/       ядро на Rust: движок, библиотека, плейлисты, SMTC, трей, окно на рабочем столе
-src-tauri/examples/  проверки без интерфейса (движок, медиасессии)
-design/              иконка и превью
-docs/                концепция библиотеки
+src/                 interface (SvelteKit): widget, panel, /preview stand
+src-tauri/src/       Rust core: engine, library, playlists, SMTC, tray, desktop window
+src-tauri/examples/  checks without the interface (engine, media sessions)
+design/              icon and previews
+docs/                library concept
 ```
 
-## Статус
+## Status
 
-Версия **0.1.1**, Windows. Дальше: подпись программы, Microsoft Store, затем macOS.
+Version **0.1.1**, Windows. Next: code signing, Microsoft Store, then macOS.
 
-Лицензия: [MIT](LICENSE). Сторонние компоненты и их лицензии — [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+License: [MIT](LICENSE). Third-party components and their licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

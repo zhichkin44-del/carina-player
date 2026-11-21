@@ -1,0 +1,47 @@
+name: Install check
+
+# Follows the install steps in README.md on a clean runner and runs the tests.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (clean install and build)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm install
+      - run: npm run check
+      - run: npm test
+      - run: npx tauri build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  ubuntu:
+    name: Ubuntu (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
