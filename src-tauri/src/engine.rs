@@ -649,8 +649,9 @@ pub async fn play_folder(
     start: Option<String>,
 ) -> Result<(), String> {
     let dir = PathBuf::from(&path);
+    // Translated by exact text in the widget (`backendErrors`, src/routes/+page.svelte).
     if !library::inside_library(&app, &dir) {
-        return Err("Папка не в библиотеке".into());
+        return Err("Folder is not in the library".into());
     }
     let mut queue = Vec::new();
     library::collect(&dir, 0, &mut queue);

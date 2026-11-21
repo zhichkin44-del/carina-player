@@ -4,6 +4,8 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { open as pickFolder } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import { i18n, t, type Key } from "$lib/i18n.svelte";
+  import { parseSettings, type Lang, type Settings } from "$lib/settings";
 
   type NowPlaying = {
     title: string;
@@ -37,20 +39,37 @@
 
   // ---- settings (per-viewer, stored locally) ----
   const SETTINGS_KEY = "carina.settings";
-  function loadSettings() {
+  function loadSettings(): Settings {
     try {
-      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "");
-      if (typeof s?.opacity === "number" && typeof s?.volume === "number") return s;
-    } catch {}
-    return { opacity: 40, volume: 0.8 };
+      return parseSettings(localStorage.getItem(SETTINGS_KEY));
+    } catch {
+      return parseSettings(null);
+    }
   }
-  let settings = $state<{ opacity: number; volume: number }>(loadSettings());
+  let settings = $state<Settings>(loadSettings());
+  i18n.lang = settings.lang;
   let settingsOpen = $state(false);
   $effect(() => {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch {}
   });
+
+  // The tray menu follows the widget's language; the backend keeps it for the next start.
+  const syncTray = (lang: Lang) => invoke("set_tray_language", { lang }).catch(() => {});
+  syncTray(settings.lang);
+  $effect(() => {
+    document.documentElement.lang = i18n.lang;
+  });
+
+  function setLang(lang: Lang) {
+    settings.lang = lang;
+    i18n.lang = lang;
+    syncTray(lang);
+  }
+
+  // Names of the built-in Favorites list are translated; user lists keep their own names.
+  const listName = (l: PlaylistSummary) => (l.id === "favorites" ? t("favorites") : l.name);
 
   // ---- now playing ----
   let track = $state<NowPlaying | null>(null);
@@ -91,6 +110,13 @@
 
   const own = $derived(queue.items.length > 0);
   const playingPath = $derived(own ? queue.items[queue.index]?.path : undefined);
+  const heading = $derived(
+    tab === "queue"
+      ? t("tabQueue")
+      : tab === "playlists"
+        ? (openList ? listName(openList) : t("tabPlaylists"))
+        : (view?.name ?? t("library")),
+  );
 
   function clock(seconds: number) {
     const s = Math.max(0, Math.floor(seconds));
@@ -116,6 +142,19 @@
     roots = await invoke<FolderEntry[]>("library_roots");
   }
 
+  // The backend reports these errors in English; they are translated here by exact text for the Russian interface.
+  // Keep the texts in sync with the Rust side (library.rs, engine.rs).
+  const backendErrors: Record<string, Key> = {
+    "Folder is not in the library": "errNotInLibrary",
+    "Not a folder": "errNotFolder",
+    "No music in this folder": "errNoMusic",
+  };
+  function errorText(e: unknown): string {
+    const text = String(e);
+    const key = backendErrors[text];
+    return key ? t(key) : text;
+  }
+
   async function openFolder(path: string, remember = true) {
     try {
       const next = await invoke<FolderView>("library_open", { path });
@@ -125,7 +164,7 @@
       query = "";
       results = null;
     } catch (e) {
-      say(String(e));
+      say(errorText(e));
     }
   }
 
@@ -136,14 +175,14 @@
   }
 
   async function addFolder(path?: string) {
-    const picked = path ?? (await pickFolder({ directory: true, title: "Папка с музыкой" }));
+    const picked = path ?? (await pickFolder({ directory: true, title: t("pickFolderTitle") }));
     if (typeof picked !== "string") return false;
     try {
       await invoke("library_add", { path: picked });
       await showRoots();
       return true;
     } catch (e) {
-      say(String(e));
+      say(errorText(e));
       return false;
     }
   }
@@ -154,7 +193,7 @@
   }
 
   function playFolder(path: string, start?: string) {
-    invoke("play_folder", { path, start }).catch((e) => say(String(e)));
+    invoke("play_folder", { path, start }).catch((e) => say(errorText(e)));
   }
 
   function playTrack(t: TrackInfo, i: number) {
@@ -192,8 +231,11 @@
       await invoke("playlist_rename", { id, name });
       if (openList?.id === id) openList = { ...openList, name };
     } else {
-      const created = await invoke<PlaylistSummary>("playlist_create", { name, paths });
-      if (paths.length) say(`Плейлист «${created.name}» создан`);
+      // Named here, in the widget's language, so the saved name stays in that language.
+      // `lists` includes Favorites, so its length is the next number the backend would pick.
+      const title = name.trim() || t("playlistNumbered", { n: lists.length });
+      const created = await invoke<PlaylistSummary>("playlist_create", { name: title, paths });
+      if (paths.length) say(t("playlistCreated", { name: created.name }));
     }
     await loadLists();
   }
@@ -215,7 +257,7 @@
     const paths = await menuPaths();
     menu = null;
     const added = await invoke<number>("playlist_add", { id: l.id, paths });
-    say(added ? `+${added} тр. в «${l.name}»` : `Уже есть в «${l.name}»`);
+    say(added ? t("addedToList", { count: added, name: listName(l) }) : t("alreadyInList", { name: listName(l) }));
     await loadLists();
   }
 
@@ -224,7 +266,7 @@
     const paths = await menuPaths();
     menu = null;
     const created = await invoke<PlaylistSummary>("playlist_create", { name: folder.name, paths });
-    say(`Плейлист «${created.name}»: ${paths.length} тр.`);
+    say(t("playlistFromFolder", { name: created.name, count: paths.length }));
     await loadLists();
   }
 
@@ -276,7 +318,7 @@
     const paths = await menuPaths();
     menu = null;
     invoke(kind === "next" ? "queue_play_next" : "queue_add", { paths });
-    say(kind === "next" ? "Сыграет следующим" : `В очереди +${paths.length} тр.`);
+    say(kind === "next" ? t("playNextNotice") : t("queuedNotice", { count: paths.length }));
   }
 
   // ---- reordering by dragging the grip (queue and playlists) ----
@@ -416,8 +458,8 @@
   <button
     class="mini heart"
     class:on={favorites.has(path)}
-    aria-label="Избранное"
-    title={favorites.has(path) ? "Убрать из избранного" : "В избранное"}
+    aria-label={t("favorites")}
+    title={favorites.has(path) ? t("removeFromFavorites") : t("addToFavorites")}
     onclick={(e) => {
       e.stopPropagation();
       toggleFavorite(path);
@@ -427,53 +469,53 @@
   </button>
 {/snippet}
 
-{#snippet trackRow(t: TrackInfo, i: number, inList: boolean)}
-  <div class="row" class:current={t.path === playingPath} class:over={drag?.over === i && drag.from !== i} data-index={i}>
+{#snippet trackRow(tr: TrackInfo, i: number, inList: boolean)}
+  <div class="row" class:current={tr.path === playingPath} class:over={drag?.over === i && drag.from !== i} data-index={i}>
     {#if inList}
-      <span class="grip" role="button" tabindex="-1" aria-label="Перетащить" title="Перетащить" onpointerdown={(e) => startDrag(e, i)}>⋮⋮</span>
+      <span class="grip" role="button" tabindex="-1" aria-label={t("dragToReorder")} title={t("dragToReorder")} onpointerdown={(e) => startDrag(e, i)}>⋮⋮</span>
     {/if}
-    <button class="row-main" onclick={() => playTrack(t, i)}>
-      <span class="num">{t.path === playingPath && track?.playing ? "♪" : inList ? i + 1 : (t.number ?? i + 1)}</span>
+    <button class="row-main" onclick={() => playTrack(tr, i)}>
+      <span class="num">{tr.path === playingPath && track?.playing ? "♪" : inList ? i + 1 : (tr.number ?? i + 1)}</span>
       <span class="names">
-        <span class="t">{t.title}</span>
-        {#if t.artist}<span class="a">{t.artist}</span>{/if}
+        <span class="t">{tr.title}</span>
+        {#if tr.artist}<span class="a">{tr.artist}</span>{/if}
       </span>
-      <span class="dur">{t.duration ? clock(t.duration) : ""}</span>
+      <span class="dur">{tr.duration ? clock(tr.duration) : ""}</span>
     </button>
-    {@render heart(t.path)}
+    {@render heart(tr.path)}
     {#if inList && openList?.id !== "favorites"}
-      <button class="mini" aria-label="Убрать из плейлиста" title="Убрать из плейлиста" onclick={() => removeFromList(t.path)}>×</button>
+      <button class="mini" aria-label={t("removeFromPlaylist")} title={t("removeFromPlaylist")} onclick={() => removeFromList(tr.path)}>×</button>
     {/if}
-    <button class="mini" aria-label="Ещё" title="Ещё" onclick={(e) => openMenu(e, [t.path])}>⋯</button>
+    <button class="mini" aria-label={t("more")} title={t("more")} onclick={(e) => openMenu(e, [tr.path])}>⋯</button>
   </div>
 {/snippet}
 
 {#snippet tile(f: FolderEntry, removable: boolean)}
   <div class="tile" role="group" oncontextmenu={(e) => openMenu(e, [], f)}>
-    <button class="art" onclick={() => openFolder(f.path)} aria-label={f.name}>
+    <button class="art" onclick={() => openFolder(f.path)} aria-label={f.name} title={f.name}>
       {#if covers[f.path]}
         <img src={covers[f.path]} alt="" draggable="false" />
       {:else}
         <svg viewBox="0 0 24 24" class="folder-icon"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
       {/if}
     </button>
-    <button class="tile-play" aria-label="Играть папку" onclick={() => playFolder(f.path)}>
+    <button class="tile-play" aria-label={t("playFolder")} onclick={() => playFolder(f.path)}>
       <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
     </button>
-    <button class="tile-more" aria-label="Ещё" title="В плейлист, в очередь…" onclick={(e) => openMenu(e, [], f)}>⋯</button>
+    <button class="tile-more" aria-label={t("more")} title={t("playlistOrQueue")} onclick={(e) => openMenu(e, [], f)}>⋯</button>
     {#if removable}
-      <button class="tile-remove" aria-label="Убрать из библиотеки" title="Убрать из библиотеки" onclick={() => removeRoot(f.path)}>×</button>
+      <button class="tile-remove" aria-label={t("removeFromLibrary")} title={t("removeFromLibrary")} onclick={() => removeRoot(f.path)}>×</button>
     {/if}
-    <span class="tile-name">{f.name}</span>
+    <span class="tile-name" title={f.name}>{f.name}</span>
   </div>
 {/snippet}
 
 <main class="widget" class:open={panelOpen} class:up style:--glass={settings.opacity / 100}>
   <div class="card" data-tauri-drag-region onwheel={onWheel}>
-    <button class="corner gear" class:active={settingsOpen} aria-label="Настройки" onclick={() => (settingsOpen = !settingsOpen)}>
+    <button class="corner gear" class:active={settingsOpen} aria-label={t("settings")} onclick={() => (settingsOpen = !settingsOpen)}>
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>
     </button>
-    <button class="corner library" class:active={panelOpen} aria-label="Библиотека" title="Библиотека" onclick={togglePanel}>
+    <button class="corner library" class:active={panelOpen} aria-label={t("library")} title={t("library")} onclick={togglePanel}>
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7" /><circle cx="18" cy="17" r="2.5" /><path d="M20.5 17V10" /></svg>
     </button>
 
@@ -488,30 +530,34 @@
     {#if settingsOpen}
       <section class="settings">
         <label class="setting">
-          <span>Фон</span>
+          <span>{t("background")}</span>
           <input type="range" min="0" max="100" step="1" bind:value={settings.opacity} />
           <span class="value">{settings.opacity}%</span>
         </label>
         <div class="settings-foot">
           <span class="signature"><span class="by">by</span><span class="author">zhichkin44-del</span></span>
-          <button class="done" onclick={() => (settingsOpen = false)}>Готово</button>
+          <div class="lang" role="group" aria-label={t("language")}>
+            <button class:on={i18n.lang === "en"} title={t("langEnglish")} aria-pressed={i18n.lang === "en"} onclick={() => setLang("en")}>EN</button>
+            <button class:on={i18n.lang === "ru"} title={t("langRussian")} aria-pressed={i18n.lang === "ru"} onclick={() => setLang("ru")}>RU</button>
+          </div>
+          <button class="done" onclick={() => (settingsOpen = false)}>{t("done")}</button>
         </div>
       </section>
     {:else}
       <section class="info" data-tauri-drag-region>
         <div class="text" data-tauri-drag-region>
-          <div class="title" data-tauri-drag-region>{track?.title || "Тишина"}</div>
+          <div class="title" data-tauri-drag-region>{track?.title || t("nothingPlaying")}</div>
           <div class="artist" data-tauri-drag-region>
-            {track ? track.artist || track.album || "Неизвестный исполнитель" : "Открой библиотеку и выбери музыку"}
+            {track ? track.artist || track.album || t("unknownArtist") : t("openLibraryHint")}
           </div>
         </div>
 
         <div class="bottom" data-tauri-drag-region>
           <nav class="controls">
-            <button class="skip" aria-label="Назад" disabled={!track?.canPrevious} onclick={() => invoke("media_previous")}>
+            <button class="skip" aria-label={t("previous")} disabled={!track?.canPrevious} onclick={() => invoke("media_previous")}>
               <svg viewBox="0 0 24 24"><rect x="5" y="5.5" width="2.6" height="13" rx="1.2" /><path d="M19 6.6v10.8a1 1 0 0 1-1.55.83L9.6 13a1.2 1.2 0 0 1 0-2l7.85-5.23A1 1 0 0 1 19 6.6z" /></svg>
             </button>
-            <button class="play" aria-label={track?.playing ? "Пауза" : "Играть"} onclick={() => invoke("media_toggle")}>
+            <button class="play" aria-label={track?.playing ? t("pause") : t("play")} onclick={() => invoke("media_toggle")}>
               {#if track?.playing}
                 <svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.4" /><rect x="13.5" y="5" width="4" height="14" rx="1.4" /></svg>
               {:else}
@@ -520,16 +566,16 @@
             </button>
             <button
               class="skip"
-              aria-label="Вперёд"
+              aria-label={t("next")}
               disabled={!track?.canNext}
-              title={track && !track.canNext ? "Дальше в очереди ничего нет" : undefined}
+              title={track && !track.canNext ? t("nextUnavailable") : undefined}
               onclick={() => invoke("media_next")}
             >
               <svg viewBox="0 0 24 24"><rect x="16.4" y="5.5" width="2.6" height="13" rx="1.2" /><path d="M5 6.6v10.8a1 1 0 0 0 1.55.83L14.4 13a1.2 1.2 0 0 0 0-2L6.55 5.77A1 1 0 0 0 5 6.6z" /></svg>
             </button>
           </nav>
           <span class="time" class:hidden={!volumeShown && (!track || track.duration <= 0)} data-tauri-drag-region>
-            {#if volumeShown}Громкость {Math.round(settings.volume * 100)}%{:else}{clock(position)} <i>/</i> {clock(track?.duration ?? 0)}{/if}
+            {#if volumeShown}{t("volume")} {Math.round(settings.volume * 100)}%{:else}{clock(position)} <i>/</i> {clock(track?.duration ?? 0)}{/if}
           </span>
         </div>
       </section>
@@ -544,31 +590,31 @@
   {#if panelOpen}
     <section class="panel">
       <header data-tauri-drag-region>
-        {#if (view && tab === "library") || (openList && tab === "playlists")}
-          <button class="icon" aria-label="Назад" onclick={() => (tab === "playlists" ? (openList = null) : back())}>
-            <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
-          </button>
-        {/if}
-        <div class="heading" data-tauri-drag-region>
-          {tab === "queue" ? "Очередь" : tab === "playlists" ? (openList?.name ?? "Плейлисты") : (view?.name ?? "Библиотека")}
+        <div class="head-row" data-tauri-drag-region>
+          {#if (view && tab === "library") || (openList && tab === "playlists")}
+            <button class="icon" aria-label={t("back")} onclick={() => (tab === "playlists" ? (openList = null) : back())}>
+              <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+            </button>
+          {/if}
+          <div class="heading" title={heading} data-tauri-drag-region>{heading}</div>
         </div>
         <div class="tabs">
-          <button class:on={tab === "library"} onclick={() => (tab = "library")}>Папки</button>
+          <button class:on={tab === "library"} onclick={() => (tab = "library")}>{t("tabFolders")}</button>
           <button
             class:on={tab === "playlists"}
             onclick={() => {
               tab = "playlists";
               loadLists();
-            }}>Плейлисты</button
+            }}>{t("tabPlaylists")}</button
           >
-          <button class:on={tab === "queue"} onclick={() => (tab = "queue")}>Очередь</button>
+          <button class:on={tab === "queue"} onclick={() => (tab = "queue")}>{t("tabQueue")}</button>
         </div>
       </header>
 
       {#if tab === "library"}
         <div class="search">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
-          <input placeholder={view ? `Искать в «${view.name}»` : "Искать во всей музыке"} bind:value={query} spellcheck="false" />
+          <input placeholder={view ? t("searchIn", { name: view.name }) : t("searchAll")} bind:value={query} spellcheck="false" />
         </div>
       {/if}
 
@@ -578,27 +624,27 @@
             <div class="toolbar">
               <button class="pill" class:on={queue.shuffle} onclick={() => invoke("set_shuffle", { on: !queue.shuffle })}>
                 <svg viewBox="0 0 24 24"><path d="M4 7h3c4 0 6 10 10 10h3M4 17h3c1.6 0 2.8-1.6 3.9-3.6M14 9.6C15 8 16 7 17 7h3M17 4l3 3-3 3M17 14l3 3-3 3" /></svg>
-                Перемешать
+                {t("shuffle")}
               </button>
               <button class="pill" class:on={queue.repeat !== "off"} onclick={cycleRepeat}>
                 <svg viewBox="0 0 24 24"><path d="M5 10V8a2 2 0 0 1 2-2h12l-3-3M19 14v2a2 2 0 0 1-2 2H5l3 3" /></svg>
-                {queue.repeat === "one" ? "Повтор трека" : queue.repeat === "all" ? "Повтор всего" : "Повтор"}
+                {queue.repeat === "one" ? t("repeatOne") : queue.repeat === "all" ? t("repeatAll") : t("repeat")}
               </button>
-              <span class="count">{queue.items.length} тр.</span>
+              <span class="count">{t("trackCount", { count: queue.items.length })}</span>
             </div>
             {#each queue.items as item, i (i)}
               <div class="row" class:current={i === queue.index} class:over={drag?.over === i && drag.from !== i} data-index={i}>
-                <span class="grip" role="button" tabindex="-1" aria-label="Перетащить" title="Перетащить" onpointerdown={(e) => startDrag(e, i)}>⋮⋮</span>
+                <span class="grip" role="button" tabindex="-1" aria-label={t("dragToReorder")} title={t("dragToReorder")} onpointerdown={(e) => startDrag(e, i)}>⋮⋮</span>
                 <button class="row-main" onclick={() => invoke("queue_jump", { index: i })}>
                   <span class="num">{i === queue.index && track?.playing ? "♪" : i + 1}</span>
                   <span class="names"><span class="t">{item.title}</span></span>
                 </button>
                 {@render heart(item.path)}
-                <button class="mini" aria-label="Убрать из очереди" title="Убрать из очереди" onclick={() => invoke("queue_remove", { index: i })}>×</button>
+                <button class="mini" aria-label={t("removeFromQueue")} title={t("removeFromQueue")} onclick={() => invoke("queue_remove", { index: i })}>×</button>
               </div>
             {/each}
           {:else}
-            <p class="empty">Очередь пуста. Выбери папку или трек в «Папках».</p>
+            <p class="empty">{t("queueEmpty")}</p>
           {/if}
         {:else if tab === "playlists"}
           {#if naming}
@@ -610,15 +656,15 @@
               }}
             >
               <!-- svelte-ignore a11y_autofocus -->
-              <input bind:value={naming.name} placeholder="Название плейлиста" autofocus spellcheck="false" />
-              <button class="pill on" type="submit">Сохранить</button>
+              <input bind:value={naming.name} placeholder={t("playlistName")} autofocus spellcheck="false" />
+              <button class="pill on" type="submit">{t("save")}</button>
             </form>
           {/if}
           {#if !openList}
             <div class="grid">
               {#each lists as l (l.id)}
                 <div class="tile">
-                  <button class="art list-art" class:fav={l.id === "favorites"} onclick={() => showList(l)} aria-label={l.name}>
+                  <button class="art list-art" class:fav={l.id === "favorites"} onclick={() => showList(l)} aria-label={listName(l)}>
                     {#if l.id === "favorites"}
                       <span class="big-heart">♥</span>
                     {:else if listCovers[`${l.id}:${l.count}`]}
@@ -628,52 +674,52 @@
                     {/if}
                   </button>
                   {#if l.count}
-                    <button class="tile-play" aria-label="Играть плейлист" onclick={() => playList(l)}>
+                    <button class="tile-play" aria-label={t("playPlaylist")} onclick={() => playList(l)}>
                       <svg viewBox="0 0 24 24"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.5.86l10.2-6.4a1 1 0 0 0 0-1.72L10 4.74A1 1 0 0 0 8.5 5.6z" /></svg>
                     </button>
                   {/if}
-                  <span class="tile-name">{l.name}</span>
-                  <span class="tile-sub">{l.count} тр.</span>
+                  <span class="tile-name" title={listName(l)}>{listName(l)}</span>
+                  <span class="tile-sub">{t("trackCount", { count: l.count })}</span>
                 </div>
               {/each}
               {#if !naming}
                 <button class="tile add" onclick={() => (naming = { id: null, name: "", paths: [] })}>
                   <span class="art"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" /></svg></span>
-                  <span class="tile-name">Новый плейлист</span>
+                  <span class="tile-name">{t("newPlaylist")}</span>
                 </button>
               {/if}
             </div>
-            <p class="hint">Совет: у любой папки есть ⋯ → «В плейлист» — добавит её целиком.</p>
+            <p class="hint">{t("playlistTip")}</p>
           {:else}
             <div class="toolbar">
               {#if listTracks.length}
-                <button class="pill on" onclick={() => invoke("play_tracks", { paths: listTracks.map((t) => t.path), start: 0 })}>▶ Играть</button>
+                <button class="pill on" onclick={() => invoke("play_tracks", { paths: listTracks.map((t) => t.path), start: 0 })}>▶ {t("play")}</button>
               {/if}
               {#if openList.id !== "favorites"}
-                <button class="pill" onclick={() => (naming = { id: openList!.id, name: openList!.name, paths: [] })}>Переименовать</button>
-                <button class="pill" onclick={() => deleteList(openList!)}>Удалить</button>
+                <button class="pill" onclick={() => (naming = { id: openList!.id, name: openList!.name, paths: [] })}>{t("rename")}</button>
+                <button class="pill" onclick={() => deleteList(openList!)}>{t("delete")}</button>
               {/if}
             </div>
             {#each listTracks as t, i (t.path)}{@render trackRow(t, i, true)}{/each}
             {#if listTracks.length === 0}
               <p class="empty">
-                {openList.id === "favorites" ? "Жми ♥ у трека — он появится здесь." : "Пусто. Добавь треки через ⋯ → «В плейлист»."}
+                {openList.id === "favorites" ? t("favoritesEmpty") : t("playlistEmpty")}
               </p>
             {/if}
           {/if}
         {:else if results}
           {#each results as t, i (t.path)}{@render trackRow(t, i, false)}{/each}
-          {#if results.length === 0}<p class="empty">Ничего не нашлось</p>{/if}
+          {#if results.length === 0}<p class="empty">{t("nothingFound")}</p>{/if}
         {:else if !view}
           <div class="grid">
             {#each roots as f (f.path)}{@render tile(f, true)}{/each}
             <button class="tile add" onclick={() => addFolder()}>
               <span class="art"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" /></svg></span>
-              <span class="tile-name">Добавить папку</span>
+              <span class="tile-name">{t("addFolder")}</span>
             </button>
           </div>
           {#if roots.length === 0}
-            <p class="empty">Добавь папку с музыкой — каждая папка станет плейлистом. Можно просто перетащить её на виджет.</p>
+            <p class="empty">{t("addFolderHint")}</p>
           {/if}
         {:else}
           {#if view.folders.length}
@@ -683,9 +729,9 @@
           {/if}
           {#if view.tracks.length}
             <div class="toolbar">
-              <button class="pill on" onclick={() => playFolder(view!.path)}>▶ Играть всё</button>
-              <button class="pill" onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name }, true)}>+ В плейлист</button>
-              <button class="pill" onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name })}>⋯</button>
+              <button class="pill on" onclick={() => playFolder(view!.path)}>▶ {t("playAll")}</button>
+              <button class="pill" onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name }, true)}>{t("addToPlaylist")}</button>
+              <button class="pill icon-only" aria-label={t("more")} title={t("more")} onclick={(e) => openMenu(e, [], { path: view!.path, name: view!.name })}>⋯</button>
             </div>
             {#each view.tracks as t, i (t.path)}{@render trackRow(t, i, false)}{/each}
           {/if}
@@ -702,15 +748,15 @@
                 onclick={() => {
                   playFolder(menu!.folder!.path);
                   menu = null;
-                }}>Играть папку</button
+                }}>{t("playFolder")}</button
               >
             {/if}
-            <button onclick={() => queueAction("next")}>Играть следующим</button>
-            <button onclick={() => queueAction("add")}>Добавить в очередь</button>
-            <button onclick={() => (menu = { ...menu!, lists: true })}>В плейлист →</button>
+            <button onclick={() => queueAction("next")}>{t("playNext")}</button>
+            <button onclick={() => queueAction("add")}>{t("addToQueue")}</button>
+            <button onclick={() => (menu = { ...menu!, lists: true })}>{t("addToPlaylistMenu")}</button>
           {:else}
             {#if menu.folder}
-              <button class="new" onclick={() => newListFromFolder(menu!.folder!)}>+ Новый «{menu.folder.name}»</button>
+              <button class="new" onclick={() => newListFromFolder(menu!.folder!)}>{t("newFromFolder", { name: menu.folder.name })}</button>
             {/if}
             {#each lists.filter((l) => l.id !== "favorites") as l (l.id)}
               <button onclick={() => addToList(l)}>{l.name}</button>
@@ -723,7 +769,7 @@
                   menu = null;
                   tab = "playlists";
                   openList = null;
-                }}>+ Новый плейлист…</button
+                }}>{t("newPlaylistMenu")}</button
               >
             {/if}
           {/if}
@@ -1039,6 +1085,27 @@
     border-radius: 12px;
     background: rgb(255 255 255 / 0.14);
   }
+  .lang {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 11px;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .lang button {
+    width: auto;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgb(255 255 255 / 0.6);
+  }
+  .lang button.on {
+    background: rgb(255 255 255 / 0.9);
+    color: #10121a;
+  }
 
   /* ---- library panel ---- */
   .panel {
@@ -1055,11 +1122,18 @@
     border-top: 0;
     border-bottom: 1px solid rgb(255 255 255 / 0.1);
   }
+  /* Two rows: the title (it can be long) on top, the tabs under it, so neither covers the other. */
   header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 12px 8px 16px;
+  }
+  .head-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 12px 12px 8px 16px;
+    min-width: 0;
   }
   .heading {
     flex: 1;
@@ -1084,18 +1158,22 @@
     stroke-linejoin: round;
   }
   .tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 2px;
     padding: 2px;
     border-radius: 14px;
     background: rgb(255 255 255 / 0.08);
   }
   .tabs button {
-    width: auto;
+    width: 100%;
     height: 24px;
-    padding: 0 10px;
+    padding: 0 6px;
     border-radius: 12px;
     font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: rgb(255 255 255 / 0.7);
   }
   .tabs button.on {
@@ -1135,6 +1213,7 @@
     color: #fff;
     font: inherit;
     font-size: 13px;
+    text-overflow: ellipsis;
     user-select: text;
   }
   .search input::placeholder {
@@ -1201,6 +1280,7 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    overflow-wrap: anywhere;
     text-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
   }
   .tile.add {
@@ -1366,8 +1446,10 @@
     fill: currentColor;
   }
 
+  /* Action buttons share one height and wrap instead of overlapping on a narrow panel. */
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     margin: 0 0 8px;
@@ -1376,17 +1458,37 @@
     margin-left: auto;
     font-size: 11px;
     color: rgb(255 255 255 / 0.5);
+    white-space: nowrap;
   }
   .pill {
+    flex: none;
     width: auto;
-    height: 26px;
-    padding: 0 10px;
-    border-radius: 13px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 14px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     font-size: 12px;
+    white-space: nowrap;
     background: rgb(255 255 255 / 0.08);
+  }
+  .pill:hover {
+    background: rgb(255 255 255 / 0.16);
+  }
+  .pill:active {
+    background: rgb(255 255 255 / 0.22);
+    transform: scale(0.96);
+  }
+  .pill:focus-visible {
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5);
+  }
+  .pill.icon-only {
+    width: 28px;
+    padding: 0;
+    font-size: 15px;
+    line-height: 1;
   }
   .pill svg {
     width: 13px;
@@ -1403,6 +1505,10 @@
   }
   .pill.on:hover {
     background: #fff;
+    color: #10121a;
+  }
+  .pill.on:active {
+    background: rgb(255 255 255 / 0.8);
     color: #10121a;
   }
 
